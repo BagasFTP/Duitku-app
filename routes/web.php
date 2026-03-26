@@ -1,27 +1,28 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
+use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\WalletController;
+use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AnalysisController;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+// Dashboard
+Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Transactions
+Route::resource('transactions', TransactionController::class);
 
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
+// Categories
+Route::resource('categories', CategoryController::class);
 
-require __DIR__.'/auth.php';
+// Wallets
+Route::resource('wallets', WalletController::class);
+
+// Budget
+Route::get('/budget', [BudgetController::class, 'index'])->name('budget.index');
+Route::post('/budget', [BudgetController::class, 'store'])->name('budget.store');
+
+// AI Analysis
+Route::get('/analysis', [AnalysisController::class, 'index'])->name('analysis.index');
+Route::post('/analysis/generate', [AnalysisController::class, 'generate'])->name('analysis.generate');

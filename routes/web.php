@@ -7,22 +7,26 @@ use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AnalysisController;
 
-// Dashboard
-Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+Route::middleware(['auth', 'verified'])->group(function () {
+    // Dashboard
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-// Transactions
-Route::resource('transactions', TransactionController::class);
+    // Transactions
+    Route::resource('transactions', TransactionController::class);
 
-// Categories
-Route::resource('categories', CategoryController::class);
+    // Categories
+    Route::resource('categories', CategoryController::class);
 
-// Wallets
-Route::resource('wallets', WalletController::class);
+    // Wallets
+    Route::resource('wallets', WalletController::class);
 
-// Budget
-Route::get('/budget', [BudgetController::class, 'index'])->name('budget.index');
-Route::post('/budget', [BudgetController::class, 'store'])->name('budget.store');
+    // Budget
+    Route::get('/budget', [BudgetController::class, 'index'])->name('budget.index');
+    Route::post('/budget', [BudgetController::class, 'store'])->name('budget.store');
 
-// AI Analysis
-Route::get('/analysis', [AnalysisController::class, 'index'])->name('analysis.index');
-Route::post('/analysis/generate', [AnalysisController::class, 'generate'])->name('analysis.generate');
+    // AI Analysis
+    Route::get('/analysis', [AnalysisController::class, 'index'])->name('analysis.index');
+    Route::post('/analysis/generate', [AnalysisController::class, 'generate'])->name('analysis.generate');
+});
+
+require __DIR__.'/auth.php';

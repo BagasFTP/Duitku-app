@@ -48,7 +48,7 @@ export default function BudgetProgress({ budgets, expenseByCategory }: Props) {
                 const isOver = actual > limit;
 
                 return (
-                    <div key={budget.id}>
+                    <div key={budget.id} className="group rounded-xl p-2 -mx-2 hover:bg-slate-50 transition-colors duration-150">
                         <div className="flex items-center justify-between text-sm mb-1">
                             <div className="flex items-center gap-2">
                                 <div

@@ -2,7 +2,6 @@ import AppLayout from '@/Layouts/AppLayout';
 import TransactionForm, { TrxFormData } from '@/Components/TransactionForm';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
-import { format } from 'date-fns';
 
 interface Category {
     id: number;
@@ -19,31 +18,44 @@ interface Wallet {
     color: string;
 }
 
+interface Transaction {
+    id: number;
+    amount: string;
+    type: 'income' | 'expense';
+    description: string;
+    date: string;
+    category_id: number;
+    wallet_id: number;
+    is_recurring: boolean;
+    recur_type: string | null;
+}
+
 interface Props {
+    transaction: Transaction;
     categories: Category[];
     wallets: Wallet[];
 }
 
-export default function TransactionCreate({ categories, wallets }: Props) {
-    const { data, setData, post, processing, errors } = useForm<TrxFormData>({
-        amount:       '',
-        type:         'expense',
-        description:  '',
-        date:         format(new Date(), 'yyyy-MM-dd'),
-        category_id:  '',
-        wallet_id:    '',
-        is_recurring: false,
-        recur_type:   '',
+export default function TransactionEdit({ transaction, categories, wallets }: Props) {
+    const { data, setData, put, processing, errors } = useForm<TrxFormData>({
+        amount:       transaction.amount,
+        type:         transaction.type,
+        description:  transaction.description ?? '',
+        date:         transaction.date,
+        category_id:  String(transaction.category_id),
+        wallet_id:    String(transaction.wallet_id),
+        is_recurring: transaction.is_recurring,
+        recur_type:   transaction.recur_type ?? '',
     });
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/transactions');
+        put(`/transactions/${transaction.id}`);
     };
 
     return (
         <AppLayout>
-            <Head title="Tambah Transaksi" />
+            <Head title="Edit Transaksi" />
 
             <div className="p-4 sm:p-6 max-w-lg mx-auto space-y-5">
                 {/* Header */}
@@ -55,8 +67,8 @@ export default function TransactionCreate({ categories, wallets }: Props) {
                         <ArrowLeft size={18} />
                     </Link>
                     <div>
-                        <h1 className="text-xl font-bold text-slate-800">Tambah Transaksi</h1>
-                        <p className="text-sm text-slate-500">Catat pemasukan atau pengeluaran baru</p>
+                        <h1 className="text-xl font-bold text-slate-800">Edit Transaksi</h1>
+                        <p className="text-sm text-slate-500">Ubah detail transaksi</p>
                     </div>
                 </div>
 
@@ -83,7 +95,7 @@ export default function TransactionCreate({ categories, wallets }: Props) {
                                 disabled={processing}
                                 className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
                             >
-                                {processing ? 'Menyimpan...' : 'Simpan'}
+                                {processing ? 'Menyimpan...' : 'Simpan Perubahan'}
                             </button>
                         </div>
                     </form>

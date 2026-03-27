@@ -41,9 +41,9 @@ export default function TransactionList({ transactions }: Props) {
     return (
         <div className="divide-y divide-gray-100">
             {transactions.map((trx) => (
-                <div key={trx.id} className="flex items-center gap-3 py-3">
+                <div key={trx.id} className="group flex items-center gap-3 py-3 rounded-xl px-2 -mx-2 hover:bg-slate-50 transition-colors duration-150 cursor-default">
                     <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-150"
                         style={{ backgroundColor: (trx.category?.color ?? '#6366f1') + '20' }}
                     >
                         <DynamicIcon

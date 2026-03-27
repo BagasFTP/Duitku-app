@@ -1,5 +1,6 @@
 import DynamicIcon from '@/Components/DynamicIcon';
-import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import DatePicker from '@/Components/DatePicker';
+import { TrendingUp, TrendingDown, RefreshCw, CalendarClock, CalendarDays, Calendar } from 'lucide-react';
 
 interface Category {
     id: number;
@@ -51,9 +52,7 @@ const inputClass =
 const labelClass = 'block text-sm font-medium text-slate-600 mb-1.5';
 
 export default function TransactionForm({ data, errors, categories, wallets, onChange }: Props) {
-    const incomeCategories = categories.filter((c) => c.type === 'income');
-    const expenseCategories = categories.filter((c) => c.type === 'expense');
-    const filtered = data.type === 'income' ? incomeCategories : expenseCategories;
+    const filtered = categories.filter((c) => c.type === data.type);
 
     return (
         <div className="space-y-5">
@@ -106,13 +105,11 @@ export default function TransactionForm({ data, errors, categories, wallets, onC
             {/* Date */}
             <div>
                 <label className={labelClass}>Tanggal</label>
-                <input
-                    type="date"
+                <DatePicker
                     value={data.date}
-                    onChange={(e) => onChange('date', e.target.value)}
-                    className={inputClass}
+                    onChange={(val) => onChange('date', val)}
+                    error={errors.date}
                 />
-                {errors.date && <p className="mt-1 text-xs text-red-500">{errors.date}</p>}
             </div>
 
             {/* Category */}
@@ -209,16 +206,27 @@ export default function TransactionForm({ data, errors, categories, wallets, onC
                 </label>
 
                 {data.is_recurring && (
-                    <select
-                        value={data.recur_type}
-                        onChange={(e) => onChange('recur_type', e.target.value)}
-                        className={inputClass}
-                    >
-                        <option value="">Pilih frekuensi</option>
-                        <option value="daily">Setiap hari</option>
-                        <option value="weekly">Setiap minggu</option>
-                        <option value="monthly">Setiap bulan</option>
-                    </select>
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            { value: 'daily',   label: 'Harian',   icon: CalendarClock },
+                            { value: 'weekly',  label: 'Mingguan', icon: CalendarDays  },
+                            { value: 'monthly', label: 'Bulanan',  icon: Calendar      },
+                        ].map(({ value, label, icon: Icon }) => (
+                            <button
+                                key={value}
+                                type="button"
+                                onClick={() => onChange('recur_type', value)}
+                                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-xs font-semibold transition-all duration-150 ${
+                                    data.recur_type === value
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200'
+                                        : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600'
+                                }`}
+                            >
+                                <Icon size={16} />
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 )}
                 {errors.recur_type && <p className="mt-1 text-xs text-red-500">{errors.recur_type}</p>}
             </div>

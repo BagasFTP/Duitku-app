@@ -5,8 +5,12 @@ interface DynamicIconProps extends LucideProps {
     name: string;
 }
 
+const toPascalCase = (str: string) =>
+    str.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+
 export default function DynamicIcon({ name, ...props }: DynamicIconProps) {
-    const Icon = (LucideIcons as Record<string, React.ComponentType<LucideProps>>)[name];
+    const key = toPascalCase(name);
+    const Icon = (LucideIcons as Record<string, React.ComponentType<LucideProps>>)[key];
     if (!Icon) return <LucideIcons.CircleDashed {...props} />;
     return <Icon {...props} />;
 }

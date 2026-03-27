@@ -1,10 +1,10 @@
 import AppLayout from '@/Layouts/AppLayout';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus, Filter, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { format, addMonths, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Category {
     id: number;
@@ -61,11 +61,6 @@ interface Props {
 const formatRupiah = (value: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 
-const MONTHS = [
-    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
 export default function TransactionsIndex({ transactions, categories, wallets, filters }: Props) {
     const { props } = usePage<{ flash?: { success?: string } }>();
     const flash = props.flash;
@@ -78,6 +73,31 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
         category_id: filters.category_id ?? '',
         wallet_id:   filters.wallet_id   ?? '',
     });
+
+    const [catOpen, setCatOpen] = useState(false);
+    const catRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const currentMonthDate = new Date(
+        Number(localFilters.year ?? now.getFullYear()),
+        Number(localFilters.month ?? now.getMonth() + 1) - 1,
+        1,
+    );
+
+    const shiftMonth = (dir: 1 | -1) => {
+        const next = dir === 1 ? addMonths(currentMonthDate, 1) : subMonths(currentMonthDate, 1);
+        applyFilters({
+            ...localFilters,
+            month: String(next.getMonth() + 1),
+            year:  String(next.getFullYear()),
+        });
+    };
 
     const applyFilters = (updated: Filters) => {
         setLocalFilters(updated);
@@ -121,52 +141,117 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                 )}
 
                 {/* Filters */}
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-1">
-                        <Filter size={14} /> Filter
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-4">
+
+                    {/* Month navigator */}
+                    <div className="flex items-center justify-between gap-3">
+                        <button
+                            type="button"
+                            onClick={() => shiftMonth(-1)}
+                            className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+
+                        <span className="text-base font-bold text-slate-800">
+                            {format(currentMonthDate, 'MMMM yyyy', { locale: id })}
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={() => shiftMonth(1)}
+                            className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <select
-                            value={localFilters.month}
-                            onChange={(e) => applyFilters({ ...localFilters, month: e.target.value })}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                        >
-                            {MONTHS.map((m, i) => (
-                                <option key={i} value={String(i + 1)}>{m}</option>
-                            ))}
-                        </select>
+                    {/* Type pills */}
+                    <div className="flex gap-2">
+                        {[
+                            { value: '',        label: 'Semua',       color: 'indigo' },
+                            { value: 'income',  label: 'Pemasukan',   color: 'emerald' },
+                            { value: 'expense', label: 'Pengeluaran', color: 'rose' },
+                        ].map(({ value, label, color }) => {
+                            const active = (localFilters.type ?? '') === value;
+                            return (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => applyFilters({ ...localFilters, type: value })}
+                                    className={`flex-1 py-2 rounded-xl text-xs font-semibold border-2 transition-all duration-150 ${
+                                        active
+                                            ? color === 'emerald'
+                                                ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-200'
+                                                : color === 'rose'
+                                                    ? 'bg-rose-500 border-rose-500 text-white shadow-sm shadow-rose-200'
+                                                    : 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200'
+                                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
 
-                        <select
-                            value={localFilters.year}
-                            onChange={(e) => applyFilters({ ...localFilters, year: e.target.value })}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    {/* Category dropdown */}
+                    <div className="relative" ref={catRef}>
+                        <button
+                            type="button"
+                            onClick={() => setCatOpen((o) => !o)}
+                            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm transition-all ${
+                                catOpen ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-indigo-300'
+                            } bg-white`}
                         >
-                            {Array.from({ length: 5 }, (_, i) => now.getFullYear() - i).map((y) => (
-                                <option key={y} value={String(y)}>{y}</option>
-                            ))}
-                        </select>
+                            {localFilters.category_id ? (() => {
+                                const cat = categories.find((c) => String(c.id) === localFilters.category_id);
+                                return cat ? (
+                                    <>
+                                        <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                                            style={{ backgroundColor: (cat.color ?? '#6366f1') + '20' }}>
+                                            <DynamicIcon name={cat.icon} size={11} style={{ color: cat.color ?? '#6366f1' }} />
+                                        </div>
+                                        <span className="flex-1 text-left font-medium text-slate-700">{cat.name}</span>
+                                    </>
+                                ) : null;
+                            })() : (
+                                <span className="flex-1 text-left text-slate-400">Semua Kategori</span>
+                            )}
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${catOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                        <select
-                            value={localFilters.type}
-                            onChange={(e) => applyFilters({ ...localFilters, type: e.target.value })}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                        >
-                            <option value="">Semua Jenis</option>
-                            <option value="income">Pemasukan</option>
-                            <option value="expense">Pengeluaran</option>
-                        </select>
-
-                        <select
-                            value={localFilters.category_id}
-                            onChange={(e) => applyFilters({ ...localFilters, category_id: e.target.value })}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                        >
-                            <option value="">Semua Kategori</option>
-                            {categories.map((c) => (
-                                <option key={c.id} value={String(c.id)}>{c.name}</option>
-                            ))}
-                        </select>
+                        {catOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 max-h-56 overflow-y-auto">
+                                <button
+                                    type="button"
+                                    onClick={() => { applyFilters({ ...localFilters, category_id: '' }); setCatOpen(false); }}
+                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex-1 text-left text-slate-500">Semua Kategori</span>
+                                    {!localFilters.category_id && <Check size={14} className="text-indigo-600" />}
+                                </button>
+                                {categories.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => { applyFilters({ ...localFilters, category_id: String(cat.id) }); setCatOpen(false); }}
+                                        className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-slate-50 transition-colors"
+                                    >
+                                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                                            style={{ backgroundColor: (cat.color ?? '#6366f1') + '20' }}>
+                                            <DynamicIcon name={cat.icon} size={13} style={{ color: cat.color ?? '#6366f1' }} />
+                                        </div>
+                                        <span className={`flex-1 text-left ${String(localFilters.category_id) === String(cat.id) ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
+                                            {cat.name}
+                                        </span>
+                                        {String(localFilters.category_id) === String(cat.id) && (
+                                            <Check size={14} className="text-indigo-600 shrink-0" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

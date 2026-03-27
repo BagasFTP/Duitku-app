@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    h1, h2, h3 {
+        @apply font-bold tracking-tight;
+    }
+
+    body {
+        @apply text-slate-800;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+}

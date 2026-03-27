@@ -19,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Wallets
     Route::resource('wallets', WalletController::class);
+    Route::post('wallets/{wallet}/adjust', [WalletController::class, 'adjust'])->name('wallets.adjust');
 
     // Budget
     Route::get('/budget', [BudgetController::class, 'index'])->name('budget.index');

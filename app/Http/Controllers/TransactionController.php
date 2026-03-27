@@ -121,12 +121,14 @@ class TransactionController extends Controller
 
     public function destroy(Transaction $transaction): RedirectResponse
     {
-        // Revert saldo wallet
-        $wallet = $transaction->wallet;
-        if ($transaction->type === 'income') {
-            $wallet->decrement('balance', $transaction->amount);
-        } else {
-            $wallet->increment('balance', $transaction->amount);
+        // Adjustment records don't have an invertible delta — skip balance revert
+        if ($transaction->type !== 'adjustment') {
+            $wallet = $transaction->wallet;
+            if ($transaction->type === 'income') {
+                $wallet->decrement('balance', $transaction->amount);
+            } else {
+                $wallet->increment('balance', $transaction->amount);
+            }
         }
 
         $transaction->delete();

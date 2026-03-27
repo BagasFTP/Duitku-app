@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Transaction;
 use App\Models\Wallet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class WalletController extends Controller
             'name'    => 'required|string|max:100',
             'type'    => 'required|in:bank,cash,ewallet',
             'balance' => 'required|numeric|min:0',
-            'icon'    => 'required|string|max:10',
+            'icon'    => 'required|string|max:50',
             'color'   => 'required|string|max:20',
         ]);
 
@@ -56,6 +57,34 @@ class WalletController extends Controller
         $wallet->update($validated);
 
         return redirect()->route('wallets.index')->with('success', 'Dompet berhasil diperbarui.');
+    }
+
+    public function adjust(Request $request, Wallet $wallet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'new_balance' => 'required|numeric|min:0',
+            'note'        => 'nullable|string|max:255',
+        ]);
+
+        $oldBalance = (float) $wallet->balance;
+        $newBalance = (float) $validated['new_balance'];
+
+        if ($oldBalance !== $newBalance) {
+            Transaction::create([
+                'amount'       => $newBalance,
+                'type'         => 'adjustment',
+                'description'  => $validated['note'] ?: 'Penyesuaian Saldo',
+                'date'         => now()->toDateString(),
+                'category_id'  => null,
+                'wallet_id'    => $wallet->id,
+                'is_recurring' => false,
+                'recur_type'   => null,
+            ]);
+
+            $wallet->update(['balance' => $newBalance]);
+        }
+
+        return redirect()->route('wallets.edit', $wallet)->with('success', 'Saldo berhasil disesuaikan.');
     }
 
     public function destroy(Wallet $wallet): RedirectResponse

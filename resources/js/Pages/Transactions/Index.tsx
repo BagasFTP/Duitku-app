@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { Plus, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ChevronDown, Check, SlidersHorizontal } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useState, useRef, useEffect } from 'react';
@@ -24,7 +24,7 @@ interface Wallet {
 interface Transaction {
     id: number;
     amount: string;
-    type: 'income' | 'expense';
+    type: 'income' | 'expense' | 'adjustment';
     description: string;
     date: string;
     is_recurring: boolean;
@@ -111,8 +111,9 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
         router.delete(`/transactions/${trx.id}`, { preserveScroll: true });
     };
 
-    const totalIncome  = transactions.data.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-    const totalExpense = transactions.data.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const totalIncome     = transactions.data.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpense    = transactions.data.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const totalAdjustment = transactions.data.filter((t) => t.type === 'adjustment').length;
 
     return (
         <AppLayout>
@@ -167,11 +168,12 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                     </div>
 
                     {/* Type pills */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         {[
-                            { value: '',        label: 'Semua',       color: 'indigo' },
-                            { value: 'income',  label: 'Pemasukan',   color: 'emerald' },
-                            { value: 'expense', label: 'Pengeluaran', color: 'rose' },
+                            { value: '',           label: 'Semua',        color: 'indigo' },
+                            { value: 'income',     label: 'Pemasukan',    color: 'emerald' },
+                            { value: 'expense',    label: 'Pengeluaran',  color: 'rose' },
+                            { value: 'adjustment', label: 'Penyesuaian',  color: 'amber' },
                         ].map(({ value, label, color }) => {
                             const active = (localFilters.type ?? '') === value;
                             return (
@@ -185,7 +187,9 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                                                 ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-200'
                                                 : color === 'rose'
                                                     ? 'bg-rose-500 border-rose-500 text-white shadow-sm shadow-rose-200'
-                                                    : 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200'
+                                                    : color === 'amber'
+                                                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-200'
+                                                        : 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200'
                                             : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                                     }`}
                                 >
@@ -282,26 +286,34 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                         </div>
                     ) : (
                         <div className="divide-y divide-slate-100">
-                            {transactions.data.map((trx) => (
+                            {transactions.data.map((trx) => {
+                                const isAdj = trx.type === 'adjustment';
+                                return (
                                 <div
                                     key={trx.id}
                                     className="group flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors duration-150"
                                 >
                                     <div
                                         className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-150"
-                                        style={{ backgroundColor: (trx.category?.color ?? '#6366f1') + '20' }}
+                                        style={{ backgroundColor: isAdj ? '#f59e0b20' : (trx.category?.color ?? '#6366f1') + '20' }}
                                     >
-                                        <DynamicIcon
-                                            name={trx.category?.icon ?? 'CircleDashed'}
-                                            size={18}
-                                            style={{ color: trx.category?.color ?? '#6366f1' }}
-                                        />
+                                        {isAdj
+                                            ? <SlidersHorizontal size={18} style={{ color: '#f59e0b' }} />
+                                            : <DynamicIcon name={trx.category?.icon ?? 'CircleDashed'} size={18} style={{ color: trx.category?.color ?? '#6366f1' }} />
+                                        }
                                     </div>
 
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-slate-800 truncate">
-                                            {trx.description || trx.category?.name || '-'}
-                                        </p>
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="text-sm font-semibold text-slate-800 truncate">
+                                                {trx.description || trx.category?.name || '-'}
+                                            </p>
+                                            {isAdj && (
+                                                <span className="shrink-0 text-xs bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-medium">
+                                                    penyesuaian
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-2 mt-0.5">
                                             <span className="text-xs text-slate-400">
                                                 {format(new Date(trx.date), 'd MMM yyyy', { locale: id })}
@@ -318,16 +330,24 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                                     </div>
 
                                     <div className="flex items-center gap-3 shrink-0">
-                                        <span className={`text-sm font-bold ${trx.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                            {trx.type === 'income' ? '+' : '-'} {formatRupiah(Number(trx.amount))}
-                                        </span>
+                                        {isAdj ? (
+                                            <span className="text-sm font-bold text-amber-500">
+                                                → {formatRupiah(Number(trx.amount))}
+                                            </span>
+                                        ) : (
+                                            <span className={`text-sm font-bold ${trx.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                {trx.type === 'income' ? '+' : '-'} {formatRupiah(Number(trx.amount))}
+                                            </span>
+                                        )}
                                         <div className="hidden group-hover:flex items-center gap-1 transition-all">
-                                            <Link
-                                                href={`/transactions/${trx.id}/edit`}
-                                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                                            >
-                                                <Pencil size={14} />
-                                            </Link>
+                                            {!isAdj && (
+                                                <Link
+                                                    href={`/transactions/${trx.id}/edit`}
+                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                >
+                                                    <Pencil size={14} />
+                                                </Link>
+                                            )}
                                             <button
                                                 onClick={() => handleDelete(trx)}
                                                 className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -337,7 +357,8 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

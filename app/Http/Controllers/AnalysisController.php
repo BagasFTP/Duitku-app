@@ -60,7 +60,17 @@ class AnalysisController extends Controller
 
         $prompt = $this->buildPrompt($month, $year, $totalIncome, $totalExpense, $expenseByCategory->toArray());
 
-        $result = $this->callAi($prompt);
+        if (!config('services.groq.key')) {
+            return redirect()->route('analysis.index', ['month' => $month, 'year' => $year])
+                ->with('error', 'API key Groq belum diset. Tambahkan GROQ_API_KEY di file .env');
+        }
+
+        [$result, $error] = $this->callAi($prompt);
+
+        if ($error) {
+            return redirect()->route('analysis.index', ['month' => $month, 'year' => $year])
+                ->with('error', $error);
+        }
 
         AiAnalysis::updateOrCreate(
             ['month' => $month, 'year' => $year],
@@ -107,23 +117,43 @@ Jawab hanya dengan JSON, tanpa teks tambahan di luar JSON.
 PROMPT;
     }
 
+    /** @return array{0: array, 1: string|null} [result, errorMessage] */
     private function callAi(string $prompt): array
     {
-        $response = Http::withHeaders([
-            'x-api-key'    => config('services.anthropic.key'),
-            'anthropic-version' => '2023-06-01',
-            'content-type' => 'application/json',
-        ])->post('https://api.anthropic.com/v1/messages', [
-            'model'      => 'claude-haiku-4-5-20251001',
-            'max_tokens' => 1024,
-            'messages'   => [
+        $key = config('services.groq.key');
+
+        $response = Http::timeout(30)->withHeaders([
+            'Authorization' => 'Bearer ' . $key,
+            'Content-Type'  => 'application/json',
+        ])->post('https://api.groq.com/openai/v1/chat/completions', [
+            'model'       => 'llama-3.1-8b-instant',
+            'temperature' => 0.7,
+            'messages'    => [
                 ['role' => 'user', 'content' => $prompt],
             ],
         ]);
 
-        $text = $response->json('content.0.text', '{}');
+        if (!$response->successful()) {
+            $msg = $response->json('error.message', 'HTTP ' . $response->status());
+            return [[], "Groq API error: {$msg}"];
+        }
 
-        return json_decode($text, true) ?? [];
+        $text = $response->json('choices.0.message.content', '');
+
+        if (empty($text)) {
+            return [[], 'Tidak ada respons dari AI. Coba lagi.'];
+        }
+
+        $text = preg_replace('/^```(?:json)?\s*/i', '', trim($text));
+        $text = preg_replace('/\s*```$/m', '', $text);
+
+        $decoded = json_decode($text, true);
+
+        if (!is_array($decoded) || empty($decoded)) {
+            return [[], 'Respons AI tidak valid. Coba lagi.'];
+        }
+
+        return [$decoded, null];
     }
 
     private function fmt(float $amount): string

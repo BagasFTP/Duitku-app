@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, useState } from 'react';
+import ChatWidget from '@/Components/ChatWidget';
 import {
     LayoutDashboard,
     ArrowLeftRight,
@@ -89,6 +90,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
+        <>
         <div className="flex min-h-screen bg-slate-50">
             {/* Mobile overlay */}
             {sidebarOpen && (
@@ -141,5 +143,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 </main>
             </div>
         </div>
+        <ChatWidget />
+        </>
     );
 }

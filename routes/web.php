@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\WalletController;
@@ -24,6 +25,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Budget
     Route::get('/budget', [BudgetController::class, 'index'])->name('budget.index');
     Route::post('/budget', [BudgetController::class, 'store'])->name('budget.store');
+
+    // Chat
+    Route::get('/chat/history', [ChatController::class, 'history'])->name('chat.history');
+    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
+    Route::post('/chat/clear', [ChatController::class, 'clear'])->name('chat.clear');
 
     // AI Analysis
     Route::get('/analysis', [AnalysisController::class, 'index'])->name('analysis.index');

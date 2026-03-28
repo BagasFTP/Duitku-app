@@ -37,7 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/analysis/generate', [AnalysisController::class, 'generate'])->name('analysis.generate');
 
     // Receipt Scanner
-    Route::post('/receipt/scan', [ReceiptController::class, 'scan'])->name('receipt.scan');
+    Route::post('/receipt/scan', [ReceiptController::class, 'scan'])->name('receipt.scan')->middleware('throttle:10,1');
 });
 
 require __DIR__.'/auth.php';

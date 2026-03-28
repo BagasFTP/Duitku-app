@@ -37,9 +37,15 @@ Analisis struk belanja ini dan ekstrak informasinya.
 Kategori yang tersedia: {$categories}
 Tanggal hari ini: {$today}
 
+PENTING untuk field "amount":
+- Gunakan nilai "Total" atau "Subtotal" (harga barang yang dibeli)
+- JANGAN gunakan nilai "Tunai", "Cash", "Bayar", atau "Pembayaran" (uang yang diserahkan)
+- JANGAN gunakan nilai "Kembali" atau "Kembalian" (uang kembalian)
+- Contoh: jika Total=58200, Tunai=60000, Kembali=1800 → amount harus 58200
+
 Kembalikan HANYA JSON valid tanpa teks lain:
 {
-  "amount": <total belanja dalam angka bulat tanpa titik/koma>,
+  "amount": <nilai Total/Subtotal dalam angka bulat tanpa titik/koma>,
   "description": "<nama toko atau merchant>",
   "date": "<tanggal transaksi format YYYY-MM-DD, gunakan hari ini jika tidak terlihat>",
   "suggested_category": "<nama kategori dari daftar di atas yang paling sesuai>"
@@ -49,26 +55,31 @@ Jika bukan struk atau tidak bisa dibaca:
 {"error": "Gambar bukan struk belanja atau tidak dapat dibaca"}
 PROMPT;
 
-        $apiKey   = config('services.gemini.key');
-        $response = Http::timeout(30)->post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}",
-            [
-                'contents' => [
-                    [
-                        'parts' => [
-                            [
-                                'inline_data' => [
-                                    'mime_type' => $mediaType,
-                                    'data'      => $imageData,
-                                ],
+        $apiKey   = config('services.anthropic.key');
+        $response = Http::timeout(30)->withHeaders([
+            'x-api-key'         => $apiKey,
+            'anthropic-version' => '2023-06-01',
+            'content-type'      => 'application/json',
+        ])->post('https://api.anthropic.com/v1/messages', [
+            'model'      => 'claude-haiku-4-5-20251001',
+            'max_tokens' => 256,
+            'messages'   => [
+                [
+                    'role'    => 'user',
+                    'content' => [
+                        [
+                            'type'   => 'image',
+                            'source' => [
+                                'type'       => 'base64',
+                                'media_type' => $mediaType,
+                                'data'       => $imageData,
                             ],
-                            ['text' => $prompt],
                         ],
+                        ['type' => 'text', 'text' => $prompt],
                     ],
                 ],
-                'generationConfig' => ['maxOutputTokens' => 256, 'temperature' => 0],
-            ]
-        );
+            ],
+        ]);
 
         if ($response->failed()) {
             return response()->json([
@@ -78,7 +89,7 @@ PROMPT;
             ], 500);
         }
 
-        $text = $response->json('candidates.0.content.parts.0.text', '');
+        $text = $response->json('content.0.text', '');
 
         preg_match('/\{.*\}/s', $text, $matches);
         $data = json_decode($matches[0] ?? '{}', true);

@@ -7,6 +7,7 @@ use App\Http\Controllers\WalletController;
 use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AnalysisController;
+use App\Http\Controllers\ReceiptController;
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
@@ -34,6 +35,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // AI Analysis
     Route::get('/analysis', [AnalysisController::class, 'index'])->name('analysis.index');
     Route::post('/analysis/generate', [AnalysisController::class, 'generate'])->name('analysis.generate');
+
+    // Receipt Scanner
+    Route::post('/receipt/scan', [ReceiptController::class, 'scan'])->name('receipt.scan');
 });
 
 require __DIR__.'/auth.php';

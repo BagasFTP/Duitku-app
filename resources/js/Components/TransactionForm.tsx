@@ -1,5 +1,6 @@
 import DynamicIcon from '@/Components/DynamicIcon';
 import DatePicker from '@/Components/DatePicker';
+import ReceiptScanner from '@/Components/ReceiptScanner';
 import { TrendingUp, TrendingDown, RefreshCw, CalendarClock, CalendarDays, Calendar } from 'lucide-react';
 
 interface Category {
@@ -56,6 +57,17 @@ export default function TransactionForm({ data, errors, categories, wallets, onC
 
     return (
         <div className="space-y-5">
+            {/* Receipt Scanner */}
+            <ReceiptScanner
+                onScanned={(scanned) => {
+                    onChange('amount', scanned.amount);
+                    onChange('type', scanned.type);
+                    onChange('description', scanned.description);
+                    onChange('date', scanned.date);
+                    if (scanned.category_id) onChange('category_id', scanned.category_id);
+                }}
+            />
+
             {/* Type Toggle */}
             <div>
                 <label className={labelClass}>Jenis Transaksi</label>

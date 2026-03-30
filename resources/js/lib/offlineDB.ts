@@ -1,15 +1,18 @@
 import Dexie, { type Table } from 'dexie';
 
-interface OfflineTransaction {
+export interface OfflineTransaction {
     id?: number;
     tempId: string;
     amount: number;
     type: 'income' | 'expense';
-    description?: string;
+    description: string;
     date: string;
     category_id: number;
     wallet_id: number;
+    is_recurring: boolean;
+    recur_type: string;
     synced: boolean;
+    syncError?: string;
     createdAt: string;
 }
 

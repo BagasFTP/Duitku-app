@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import { Bell, AlertTriangle, TrendingDown, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import DynamicIcon from '@/Components/DynamicIcon';
 
 interface BudgetAlert {
     category_name: string;
@@ -16,7 +17,7 @@ const fmt = (v: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v);
 
 export default function BudgetAlertBell() {
-    const { budgetAlerts } = usePage<{ budgetAlerts: BudgetAlert[] }>().props;
+    const { budgetAlerts } = usePage<{ auth: any; budgetAlerts: BudgetAlert[] }>().props;
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
@@ -93,10 +94,14 @@ export default function BudgetAlertBell() {
                             >
                                 <div className="flex items-center gap-2 mb-2">
                                     <div
-                                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm"
+                                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                                         style={{ backgroundColor: (alert.category_color ?? '#6366f1') + '30' }}
                                     >
-                                        {alert.category_icon}
+                                        <DynamicIcon
+                                            name={alert.category_icon}
+                                            size={15}
+                                            style={{ color: alert.category_color ?? '#6366f1' }}
+                                        />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-semibold text-slate-800 truncate">

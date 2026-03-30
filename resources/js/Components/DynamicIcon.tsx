@@ -10,7 +10,7 @@ const toPascalCase = (str: string) =>
 
 export default function DynamicIcon({ name, ...props }: DynamicIconProps) {
     const key = toPascalCase(name);
-    const Icon = (LucideIcons as Record<string, React.ComponentType<LucideProps>>)[key];
+    const Icon = (LucideIcons as unknown as Record<string, React.ComponentType<LucideProps>>)[key];
     if (!Icon) return <LucideIcons.CircleDashed {...props} />;
     return <Icon {...props} />;
 }

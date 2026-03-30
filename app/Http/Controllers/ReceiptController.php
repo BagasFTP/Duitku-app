@@ -43,9 +43,19 @@ PENTING untuk field "amount":
 - JANGAN gunakan nilai "Kembali" atau "Kembalian" (uang kembalian)
 - Contoh: jika Total=58200, Tunai=60000, Kembali=1800 → amount harus 58200
 
+FORMAT ANGKA STRUK INDONESIA:
+- Titik (.) adalah pemisah ribuan, BUKAN pemisah desimal
+- Koma (,) adalah pemisah desimal
+- Angka setelah koma (,000) adalah sen/desimal, ABAIKAN bagian ini
+- Contoh konversi:
+  - "58.200,000" → 58200 (lima puluh delapan ribu dua ratus)
+  - "48.200,000" → 48200 (empat puluh delapan ribu dua ratus)
+  - "1.500.000,000" → 1500000 (satu juta lima ratus ribu)
+  - "10.000,000" → 10000 (sepuluh ribu)
+
 Kembalikan HANYA JSON valid tanpa teks lain:
 {
-  "amount": <nilai Total/Subtotal dalam angka bulat tanpa titik/koma>,
+  "amount": <nilai Total/Subtotal sebagai integer rupiah tanpa titik/koma>,
   "description": "<nama toko atau merchant>",
   "date": "<tanggal transaksi format YYYY-MM-DD, gunakan hari ini jika tidak terlihat>",
   "suggested_category": "<nama kategori dari daftar di atas yang paling sesuai>"

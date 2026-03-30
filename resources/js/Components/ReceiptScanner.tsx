@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
-import { Camera, X, Loader2, ScanLine, ImagePlus, Video, CircleDot } from 'lucide-react';
+import { Camera, X, Loader2, ScanLine, ImagePlus, Video, CircleDot, ZoomIn, RefreshCw } from 'lucide-react';
 
 interface ScannedData {
     amount: string;
@@ -15,11 +15,13 @@ interface Props {
 }
 
 export default function ReceiptScanner({ onScanned }: Props) {
-    const [open, setOpen]           = useState(false);
-    const [preview, setPreview]     = useState<string | null>(null);
-    const [loading, setLoading]     = useState(false);
-    const [error, setError]         = useState<string | null>(null);
-    const [webcamOn, setWebcamOn]   = useState(false);
+    const [open, setOpen]                     = useState(false);
+    const [preview, setPreview]               = useState<string | null>(null);
+    const [loading, setLoading]               = useState(false);
+    const [error, setError]                   = useState<string | null>(null);
+    const [webcamOn, setWebcamOn]             = useState(false);
+    const [scannedPreview, setScannedPreview] = useState<string | null>(null);
+    const [showFullPreview, setShowFullPreview] = useState(false);
 
     const fileRef   = useRef<HTMLInputElement>(null);
     const cameraRef = useRef<HTMLInputElement>(null);
@@ -27,7 +29,6 @@ export default function ReceiptScanner({ onScanned }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
-    // Stop webcam when modal closes
     useEffect(() => {
         if (!open) stopWebcam();
     }, [open]);
@@ -46,7 +47,6 @@ export default function ReceiptScanner({ onScanned }: Props) {
             });
             streamRef.current = stream;
             setWebcamOn(true);
-            // Attach stream to video element after render
             setTimeout(() => {
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
@@ -87,6 +87,7 @@ export default function ReceiptScanner({ onScanned }: Props) {
         setError(null);
         try {
             const res = await axios.post('/receipt/scan', { image: preview });
+            setScannedPreview(preview);
             onScanned(res.data);
             setOpen(false);
             setPreview(null);
@@ -107,15 +108,85 @@ export default function ReceiptScanner({ onScanned }: Props) {
 
     return (
         <>
+            {/* Tombol scan / scan ulang */}
             <button
                 type="button"
                 onClick={() => { setOpen(true); reset(); }}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition w-full justify-center"
             >
                 <ScanLine size={16} />
-                Scan Struk Belanja
+                {scannedPreview ? 'Scan Ulang' : 'Scan Struk Belanja'}
             </button>
 
+            {/* Thumbnail struk hasil scan */}
+            {scannedPreview && !open && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-indigo-100">
+                        <span className="text-xs font-medium text-indigo-700 flex items-center gap-1.5">
+                            <ScanLine size={12} />
+                            Struk dipindai — koreksi data di bawah jika perlu
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setScannedPreview(null)}
+                            className="text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                    <div
+                        className="relative cursor-zoom-in group"
+                        onClick={() => setShowFullPreview(true)}
+                    >
+                        <img
+                            src={scannedPreview}
+                            alt="Struk yang dipindai"
+                            className="w-full max-h-52 object-contain bg-white"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/55 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm">
+                                <ZoomIn size={12} />
+                                Perbesar
+                            </span>
+                        </div>
+                    </div>
+                    <div className="px-3 py-2 flex items-center justify-between">
+                        <span className="text-xs text-slate-400">Tap gambar untuk memperbesar</span>
+                        <button
+                            type="button"
+                            onClick={() => { setOpen(true); reset(); }}
+                            className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
+                        >
+                            <RefreshCw size={11} />
+                            Scan ulang
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Lightbox full size */}
+            {showFullPreview && scannedPreview && (
+                <div
+                    className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4"
+                    onClick={() => setShowFullPreview(false)}
+                >
+                    <button
+                        type="button"
+                        className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+                        onClick={() => setShowFullPreview(false)}
+                    >
+                        <X size={20} />
+                    </button>
+                    <img
+                        src={scannedPreview}
+                        alt="Struk"
+                        className="max-w-full max-h-[90vh] rounded-xl shadow-2xl object-contain"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
+
+            {/* Modal scan */}
             {open && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-4">
                     <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
@@ -143,7 +214,6 @@ export default function ReceiptScanner({ onScanned }: Props) {
                                             muted
                                             className="w-full max-h-64 object-cover"
                                         />
-                                        {/* scan guide overlay */}
                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                             <div className="border-2 border-white/60 rounded-xl w-4/5 h-3/4" />
                                         </div>
@@ -171,26 +241,63 @@ export default function ReceiptScanner({ onScanned }: Props) {
 
                             {/* Preview hasil foto */}
                             {!webcamOn && preview && (
-                                <div className="relative">
+                                <div className="relative rounded-xl overflow-hidden">
+                                    <style>{`
+                                        @keyframes scanLine {
+                                            0%   { top: 4%; }
+                                            50%  { top: 88%; }
+                                            100% { top: 4%; }
+                                        }
+                                        .receipt-scan-line {
+                                            animation: scanLine 1.8s ease-in-out infinite;
+                                        }
+                                    `}</style>
+
                                     <img
                                         src={preview}
                                         alt="Preview struk"
                                         className="w-full max-h-64 object-contain rounded-xl border border-slate-200 bg-slate-50"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={reset}
-                                        className="absolute top-2 right-2 bg-white rounded-full p-1 shadow text-slate-500 hover:text-red-500"
-                                    >
-                                        <X size={14} />
-                                    </button>
+
+                                    {/* Scan animation overlay */}
+                                    {loading && (
+                                        <div className="absolute inset-0 rounded-xl overflow-hidden">
+                                            <div className="absolute inset-0 bg-black/25" />
+                                            <div
+                                                className="receipt-scan-line absolute left-4 right-4 h-0.5 rounded-full pointer-events-none"
+                                                style={{
+                                                    background: 'linear-gradient(90deg, transparent, #a5b4fc, #6366f1, #a5b4fc, transparent)',
+                                                    boxShadow: '0 0 10px 3px rgba(99,102,241,0.6)',
+                                                }}
+                                            />
+                                            <div className="absolute top-3 left-3 w-7 h-7 border-t-2 border-l-2 border-indigo-400 rounded-tl" />
+                                            <div className="absolute top-3 right-3 w-7 h-7 border-t-2 border-r-2 border-indigo-400 rounded-tr" />
+                                            <div className="absolute bottom-3 left-3 w-7 h-7 border-b-2 border-l-2 border-indigo-400 rounded-bl" />
+                                            <div className="absolute bottom-3 right-3 w-7 h-7 border-b-2 border-r-2 border-indigo-400 rounded-br" />
+                                            <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none">
+                                                <span className="bg-black/50 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-1.5">
+                                                    <Loader2 size={11} className="animate-spin" />
+                                                    Menganalisis struk...
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!loading && (
+                                        <button
+                                            type="button"
+                                            onClick={reset}
+                                            className="absolute top-2 right-2 bg-white rounded-full p-1 shadow text-slate-500 hover:text-red-500"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
                             {/* Pilihan sumber foto */}
                             {!webcamOn && !preview && (
                                 <div className="grid grid-cols-3 gap-2">
-                                    {/* Webcam */}
                                     <button
                                         type="button"
                                         onClick={startWebcam}
@@ -200,7 +307,6 @@ export default function ReceiptScanner({ onScanned }: Props) {
                                         <span className="text-xs font-medium">Webcam</span>
                                     </button>
 
-                                    {/* Kamera HP */}
                                     <label className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition text-slate-500 hover:text-indigo-600">
                                         <Camera size={22} />
                                         <span className="text-xs font-medium">Kamera</span>
@@ -214,7 +320,6 @@ export default function ReceiptScanner({ onScanned }: Props) {
                                         />
                                     </label>
 
-                                    {/* Galeri */}
                                     <label className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition text-slate-500 hover:text-indigo-600">
                                         <ImagePlus size={22} />
                                         <span className="text-xs font-medium">Galeri</span>

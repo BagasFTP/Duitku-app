@@ -143,14 +143,14 @@ export default function DatePicker({ value, onChange, error }: Props) {
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
-                                onClick={() => select(subDays(new Date(), 1))}
+                                onClick={() => onChange(format(subDays(new Date(), 1), 'yyyy-MM-dd'))}
                                 className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                             >
                                 Kemarin
                             </button>
                             <button
                                 type="button"
-                                onClick={() => select(new Date())}
+                                onClick={() => onChange(format(new Date(), 'yyyy-MM-dd'))}
                                 className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                             >
                                 Hari ini

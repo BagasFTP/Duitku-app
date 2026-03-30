@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, useState } from 'react';
 import ChatWidget from '@/Components/ChatWidget';
+import SyncBadge from '@/Components/SyncBadge';
 import {
     LayoutDashboard,
     ArrowLeftRight,

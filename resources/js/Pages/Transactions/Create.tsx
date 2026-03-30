@@ -1,8 +1,10 @@
 import AppLayout from '@/Layouts/AppLayout';
 import TransactionForm, { TrxFormData } from '@/Components/TransactionForm';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, WifiOff } from 'lucide-react';
 import { format } from 'date-fns';
+import { useState } from 'react';
+import { saveOfflineTransaction } from '@/lib/syncService';
 
 interface Category {
     id: number;
@@ -24,20 +26,42 @@ interface Props {
     wallets: Wallet[];
 }
 
-export default function TransactionCreate({ categories, wallets }: Props) {
-    const { data, setData, post, processing, errors } = useForm<TrxFormData>({
-        amount:       '',
-        type:         'expense',
-        description:  '',
-        date:         format(new Date(), 'yyyy-MM-dd'),
-        category_id:  '',
-        wallet_id:    '',
-        is_recurring: false,
-        recur_type:   '',
-    });
+const defaultForm: TrxFormData = {
+    amount:       '',
+    type:         'expense',
+    description:  '',
+    date:         format(new Date(), 'yyyy-MM-dd'),
+    category_id:  '',
+    wallet_id:    '',
+    is_recurring: false,
+    recur_type:   '',
+};
 
-    const submit = (e: React.FormEvent) => {
+export default function TransactionCreate({ categories, wallets }: Props) {
+    const { data, setData, post, processing, errors, reset } = useForm<TrxFormData>(defaultForm);
+    const [offlineSaved, setOfflineSaved] = useState(false);
+
+    const submit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!navigator.onLine) {
+            await saveOfflineTransaction({
+                tempId:       crypto.randomUUID(),
+                amount:       Number(data.amount),
+                type:         data.type,
+                description:  data.description,
+                date:         data.date,
+                category_id:  Number(data.category_id),
+                wallet_id:    Number(data.wallet_id),
+                is_recurring: data.is_recurring,
+                recur_type:   data.recur_type,
+            });
+            reset();
+            setOfflineSaved(true);
+            return;
+        }
+
+        setOfflineSaved(false);
         post('/transactions');
     };
 
@@ -60,6 +84,20 @@ export default function TransactionCreate({ categories, wallets }: Props) {
                     </div>
                 </div>
 
+                {/* Offline saved banner */}
+                {offlineSaved && (
+                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <WifiOff size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-semibold text-amber-800">Disimpan offline</p>
+                            <p className="text-xs text-amber-600 mt-0.5">
+                                Transaksi akan dikirim ke server saat koneksi kembali aktif.
+                            </p>
+                        </div>
+                        <CheckCircle2 size={18} className="text-amber-500 shrink-0 mt-0.5 ml-auto" />
+                    </div>
+                )}
+
                 {/* Form Card */}
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
                     <form onSubmit={submit} className="space-y-5">
@@ -68,7 +106,10 @@ export default function TransactionCreate({ categories, wallets }: Props) {
                             errors={errors}
                             categories={categories}
                             wallets={wallets}
-                            onChange={(field, value) => setData(field as keyof TrxFormData, value as never)}
+                            onChange={(field, value) => {
+                                setOfflineSaved(false);
+                                setData(field, value as never);
+                            }}
                         />
 
                         <div className="flex gap-3 pt-2">

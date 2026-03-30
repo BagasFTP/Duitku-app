@@ -18,9 +18,13 @@ const fmt = (v: number) =>
 
 export default function BudgetAlertBell() {
     const { budgetAlerts } = usePage<{ auth: any; budgetAlerts: BudgetAlert[] }>().props;
+
+    const now = new Date();
+    const storageKey = `budget-alerts-${now.getFullYear()}-${now.getMonth() + 1}`;
+
     const [open, setOpen] = useState(false);
-    const [seen, setSeen] = useState(false);
-    const [cleared, setCleared] = useState(false);
+    const [seen, setSeen] = useState(() => localStorage.getItem(`${storageKey}-seen`) === 'true');
+    const [cleared, setCleared] = useState(() => localStorage.getItem(`${storageKey}-cleared`) === 'true');
     const ref = useRef<HTMLDivElement>(null);
 
     const alerts = budgetAlerts ?? [];
@@ -41,6 +45,7 @@ export default function BudgetAlertBell() {
     const handleOpen = () => {
         setOpen((o) => !o);
         setSeen(true);
+        localStorage.setItem(`${storageKey}-seen`, 'true');
     };
 
     if (alerts.length === 0) return null;
@@ -161,7 +166,11 @@ export default function BudgetAlertBell() {
                             Kelola Anggaran →
                         </Link>
                         <button
-                            onClick={() => { setCleared(true); setOpen(false); }}
+                            onClick={() => {
+                                setCleared(true);
+                                localStorage.setItem(`${storageKey}-cleared`, 'true');
+                                setOpen(false);
+                            }}
                             className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
                         >
                             Hapus Notifikasi

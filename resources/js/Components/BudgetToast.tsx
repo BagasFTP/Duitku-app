@@ -19,13 +19,6 @@ export default function BudgetToast() {
     useEffect(() => {
         if (!alert) return;
 
-        // Reset semua state bell agar notif bell ikut tampil kembali
-        const now = new Date();
-        const bellKey = `budget-bell-${now.getFullYear()}-${now.getMonth() + 1}`;
-        localStorage.removeItem(`${bellKey}-cleared`);
-        localStorage.removeItem(`${bellKey}-seenCount`);
-        localStorage.removeItem(`${bellKey}-seenOverCount`);
-
         setMounted(true);
         const enterTimer = setTimeout(() => setVisible(true), 50);
         const exitTimer  = setTimeout(() => setVisible(false), 6000);

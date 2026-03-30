@@ -16,35 +16,37 @@ interface BudgetAlert {
 const fmt = (v: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v);
 
+// Key unik per alert — berubah otomatis jika status near → over
+const alertKey = (a: BudgetAlert) => `${a.category_name}::${a.is_over ? 'over' : 'near'}`;
+
 export default function BudgetAlertBell() {
     const { budgetAlerts } = usePage<{ auth: any; budgetAlerts: BudgetAlert[] }>().props;
 
     const now = new Date();
-    // Key berubah setiap bulan → semua state auto-reset awal bulan baru
     const storageKey = `budget-bell-${now.getFullYear()}-${now.getMonth() + 1}`;
 
     const alerts = budgetAlerts ?? [];
-    const overCount  = alerts.filter((a) => a.is_over).length;
-    const nearCount  = alerts.filter((a) => !a.is_over).length;
 
-    // Lacak dua hal secara terpisah:
-    // 1. Jumlah total alert (kategori baru masuk 80%)
-    // 2. Jumlah yang sudah melebihi (near → exceeded = notif baru)
-    const storedSeenCount    = parseInt(localStorage.getItem(`${storageKey}-seenCount`) ?? '0', 10);
-    const storedSeenOverCount = parseInt(localStorage.getItem(`${storageKey}-seenOverCount`) ?? '0', 10);
-    const [seenCount,     setSeenCount]     = useState(storedSeenCount);
-    const [seenOverCount, setSeenOverCount] = useState(storedSeenOverCount);
-
-    // Cleared hanya menyembunyikan daftar pesan di dropdown (bukan ikon)
-    const [cleared, setCleared] = useState(() => localStorage.getItem(`${storageKey}-cleared`) === 'true');
+    // seenKeys   : alert yang sudah pernah dibuka user di bell (hilang dari list)
+    // dismissedKeys : alert yang di-dismiss via "Hapus Notifikasi"
+    const [seenKeys, setSeenKeys] = useState<string[]>(
+        () => JSON.parse(localStorage.getItem(`${storageKey}-seenKeys`) ?? '[]')
+    );
+    const [dismissedKeys, setDismissedKeys] = useState<string[]>(
+        () => JSON.parse(localStorage.getItem(`${storageKey}-dismissedKeys`) ?? '[]')
+    );
 
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
-    // Badge muncul jika: ada alert baru ATAU ada yang naik dari "hampir habis" ke "melebihi"
-    const showBadge = !cleared && (alerts.length > seenCount || overCount > seenOverCount);
+    // Tampilkan hanya alert yang belum pernah dilihat dan belum di-dismiss
+    const visibleAlerts    = alerts.filter(a => !seenKeys.includes(alertKey(a)) && !dismissedKeys.includes(alertKey(a)));
+    const visibleOverCount = visibleAlerts.filter(a => a.is_over).length;
+    const visibleNearCount = visibleAlerts.filter(a => !a.is_over).length;
 
-    // Close dropdown on outside click
+    // Badge muncul selama ada alert yang belum dilihat
+    const showBadge = visibleAlerts.length > 0;
+
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) {
@@ -56,12 +58,19 @@ export default function BudgetAlertBell() {
     }, []);
 
     const handleOpen = () => {
-        setOpen((o) => !o);
-        // Tandai status saat ini sudah dilihat
-        setSeenCount(alerts.length);
-        setSeenOverCount(overCount);
-        localStorage.setItem(`${storageKey}-seenCount`,     String(alerts.length));
-        localStorage.setItem(`${storageKey}-seenOverCount`, String(overCount));
+        setOpen(o => !o);
+        // Tandai semua yang sedang ditampilkan sebagai "sudah dilihat"
+        const newSeenKeys = [...new Set([...seenKeys, ...visibleAlerts.map(alertKey)])];
+        setSeenKeys(newSeenKeys);
+        localStorage.setItem(`${storageKey}-seenKeys`, JSON.stringify(newSeenKeys));
+    };
+
+    // Hapus Notifikasi: dismiss semua yang sedang terlihat
+    const handleClear = () => {
+        const newDismissed = [...new Set([...dismissedKeys, ...visibleAlerts.map(alertKey)])];
+        setDismissedKeys(newDismissed);
+        localStorage.setItem(`${storageKey}-dismissedKeys`, JSON.stringify(newDismissed));
+        setOpen(false);
     };
 
     if (alerts.length === 0) return null;
@@ -76,7 +85,7 @@ export default function BudgetAlertBell() {
                 <Bell size={18} />
                 {showBadge && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
-                        {alerts.length > 9 ? '9+' : alerts.length}
+                        {visibleAlerts.length > 9 ? '9+' : visibleAlerts.length}
                     </span>
                 )}
             </button>
@@ -97,17 +106,17 @@ export default function BudgetAlertBell() {
                         </button>
                     </div>
 
-                    {/* Summary pill */}
-                    {!cleared && (
-                        <div className="px-4 pt-3 pb-2 flex gap-2">
-                            {overCount > 0 && (
+                    {/* Summary pills */}
+                    {visibleAlerts.length > 0 && (
+                        <div className="px-4 pt-3 pb-2 flex gap-2 flex-wrap">
+                            {visibleOverCount > 0 && (
                                 <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
-                                    <AlertTriangle size={10} /> {overCount} terlampaui
+                                    <AlertTriangle size={10} /> {visibleOverCount} terlampaui
                                 </span>
                             )}
-                            {nearCount > 0 && (
+                            {visibleNearCount > 0 && (
                                 <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                                    <TrendingDown size={10} /> {nearCount} hampir habis
+                                    <TrendingDown size={10} /> {visibleNearCount} hampir habis
                                 </span>
                             )}
                         </div>
@@ -115,18 +124,16 @@ export default function BudgetAlertBell() {
 
                     {/* Alert list */}
                     <div className="max-h-72 overflow-y-auto px-3 pb-3 space-y-2">
-                        {cleared ? (
+                        {visibleAlerts.length === 0 ? (
                             <div className="py-6 flex flex-col items-center gap-2 text-slate-400">
                                 <Bell size={22} className="opacity-40" />
-                                <p className="text-xs">Tidak ada notifikasi</p>
+                                <p className="text-xs">Tidak ada notifikasi baru</p>
                             </div>
-                        ) : alerts.map((alert, i) => (
+                        ) : visibleAlerts.map((alert, i) => (
                             <div
                                 key={i}
                                 className={`rounded-xl p-3 border ${
-                                    alert.is_over
-                                        ? 'bg-red-50 border-red-100'
-                                        : 'bg-amber-50 border-amber-100'
+                                    alert.is_over ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'
                                 }`}
                             >
                                 <div className="flex items-center gap-2 mb-2">
@@ -153,7 +160,6 @@ export default function BudgetAlertBell() {
                                     </span>
                                 </div>
 
-                                {/* Progress bar */}
                                 <div className="h-1.5 w-full rounded-full bg-white/60 overflow-hidden">
                                     <div
                                         className="h-full rounded-full transition-all"
@@ -181,20 +187,14 @@ export default function BudgetAlertBell() {
                         >
                             Kelola Anggaran →
                         </Link>
-                        <button
-                            onClick={() => {
-                                setCleared(true);
-                                setSeenCount(alerts.length);
-                                setSeenOverCount(overCount);
-                                localStorage.setItem(`${storageKey}-cleared`,      'true');
-                                localStorage.setItem(`${storageKey}-seenCount`,     String(alerts.length));
-                                localStorage.setItem(`${storageKey}-seenOverCount`, String(overCount));
-                                setOpen(false);
-                            }}
-                            className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
-                        >
-                            Hapus Notifikasi
-                        </button>
+                        {visibleAlerts.length > 0 && (
+                            <button
+                                onClick={handleClear}
+                                className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                                Hapus Notifikasi
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

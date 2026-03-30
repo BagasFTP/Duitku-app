@@ -140,6 +140,52 @@ class TransactionController extends Controller
         return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil diperbarui.');
     }
 
+    public function syncOffline(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'items'                => 'required|array|min:1|max:100',
+            'items.*.tempId'       => 'required|string',
+            'items.*.amount'       => 'required|numeric|min:0',
+            'items.*.type'         => 'required|in:income,expense',
+            'items.*.description'  => 'nullable|string|max:255',
+            'items.*.date'         => 'required|date',
+            'items.*.category_id'  => 'required|exists:categories,id',
+            'items.*.wallet_id'    => 'required|exists:wallets,id',
+            'items.*.is_recurring' => 'boolean',
+            'items.*.recur_type'   => 'nullable|in:daily,weekly,monthly',
+        ]);
+
+        $results = [];
+
+        foreach ($validated['items'] as $item) {
+            try {
+                if (!empty($item['is_recurring']) && !empty($item['recur_type'])) {
+                    $base = Carbon::parse($item['date']);
+                    $item['next_occurrence_at'] = match ($item['recur_type']) {
+                        'daily'   => $base->copy()->addDay()->toDateString(),
+                        'weekly'  => $base->copy()->addWeek()->toDateString(),
+                        'monthly' => $base->copy()->addMonth()->toDateString(),
+                    };
+                }
+
+                $transaction = Transaction::create($item);
+
+                $wallet = $transaction->wallet;
+                if ($transaction->type === 'income') {
+                    $wallet->increment('balance', $transaction->amount);
+                } else {
+                    $wallet->decrement('balance', $transaction->amount);
+                }
+
+                $results[] = ['tempId' => $item['tempId'], 'success' => true];
+            } catch (\Exception $e) {
+                $results[] = ['tempId' => $item['tempId'], 'success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return response()->json(['results' => $results]);
+    }
+
     public function destroy(Transaction $transaction): RedirectResponse
     {
         // Adjustment records don't have an invertible delta — skip balance revert

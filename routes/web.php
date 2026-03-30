@@ -15,6 +15,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Transactions
     Route::resource('transactions', TransactionController::class);
+    Route::post('transactions/sync-offline', [TransactionController::class, 'syncOffline'])->name('transactions.sync-offline');
 
     // Categories
     Route::resource('categories', CategoryController::class);

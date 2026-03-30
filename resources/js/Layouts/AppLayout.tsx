@@ -137,7 +137,15 @@ export default function AppLayout({ children }: PropsWithChildren) {
                         </div>
                         <span className="text-base font-bold text-indigo-700">Duitku</span>
                     </div>
+                    <div className="ml-auto">
+                        <SyncBadge />
+                    </div>
                 </header>
+
+                {/* Desktop sync badge */}
+                <div className="hidden lg:flex items-center justify-end px-6 py-2 border-b border-slate-100 bg-white min-h-[40px]">
+                    <SyncBadge />
+                </div>
 
                 <main className="flex-1 overflow-auto">
                     {children}

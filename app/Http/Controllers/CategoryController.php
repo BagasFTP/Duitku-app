@@ -13,7 +13,7 @@ class CategoryController extends Controller
     public function index(): Response
     {
         return Inertia::render('Categories/Index', [
-            'categories' => Category::withCount('transactions')->orderBy('type')->orderBy('name')->get(),
+            'categories' => Category::where('user_id', auth()->id())->withCount('transactions')->orderBy('type')->orderBy('name')->get(),
         ]);
     }
 
@@ -32,6 +32,7 @@ class CategoryController extends Controller
             'budget' => 'nullable|numeric|min:0',
         ]);
 
+        $validated['user_id'] = auth()->id();
         Category::create($validated);
 
         return redirect()->route('categories.index')->with('success', 'Kategori berhasil ditambahkan.');

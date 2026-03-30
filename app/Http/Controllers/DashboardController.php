@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\Budget;
-use App\Models\Category;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,6 +18,7 @@ class DashboardController extends Controller
         $year  = $now->year;
 
         $transactions = Transaction::with(['category', 'wallet'])
+            ->where('user_id', auth()->id())
             ->whereMonth('date', $month)
             ->whereYear('date', $year)
             ->latest('date')
@@ -37,11 +37,12 @@ class DashboardController extends Controller
             ->values();
 
         $budgets = Budget::with('category')
+            ->where('user_id', auth()->id())
             ->where('month', $month)
             ->where('year', $year)
             ->get();
 
-        $wallets = Wallet::all();
+        $wallets = Wallet::where('user_id', auth()->id())->orderBy('name')->get();
 
         return Inertia::render('Dashboard', [
             'summary' => [

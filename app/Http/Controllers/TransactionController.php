@@ -17,6 +17,7 @@ class TransactionController extends Controller
     public function index(Request $request): Response
     {
         $query = Transaction::with(['category', 'wallet'])
+            ->where('user_id', auth()->id())
             ->latest('date');
 
         if ($request->filled('month') && $request->filled('year')) {
@@ -38,8 +39,8 @@ class TransactionController extends Controller
 
         return Inertia::render('Transactions/Index', [
             'transactions' => $query->paginate(20)->withQueryString(),
-            'categories'   => Category::orderBy('name')->get(),
-            'wallets'      => Wallet::orderBy('name')->get(),
+            'categories'   => Category::where('user_id', auth()->id())->orderBy('name')->get(),
+            'wallets'      => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
             'filters'      => $request->only(['month', 'year', 'type', 'category_id', 'wallet_id']),
         ]);
     }
@@ -47,8 +48,8 @@ class TransactionController extends Controller
     public function create(): Response
     {
         return Inertia::render('Transactions/Create', [
-            'categories' => Category::orderBy('type')->orderBy('name')->get(),
-            'wallets'    => Wallet::orderBy('name')->get(),
+            'categories' => Category::where('user_id', auth()->id())->orderBy('type')->orderBy('name')->get(),
+            'wallets'    => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
         ]);
     }
 
@@ -74,6 +75,7 @@ class TransactionController extends Controller
             };
         }
 
+        $validated['user_id'] = auth()->id();
         $transaction = Transaction::create($validated);
 
         // Update saldo wallet
@@ -95,8 +97,8 @@ class TransactionController extends Controller
     {
         return Inertia::render('Transactions/Edit', [
             'transaction' => $transaction->load(['category', 'wallet']),
-            'categories'  => Category::orderBy('type')->orderBy('name')->get(),
-            'wallets'     => Wallet::orderBy('name')->get(),
+            'categories'  => Category::where('user_id', auth()->id())->orderBy('type')->orderBy('name')->get(),
+            'wallets'     => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
         ]);
     }
 
@@ -159,7 +161,8 @@ class TransactionController extends Controller
         // Hanya cek transaksi bulan ini
         if ($txDate->month !== $now->month || $txDate->year !== $now->year) return null;
 
-        $budget = Budget::where('category_id', $categoryId)
+        $budget = Budget::where('user_id', auth()->id())
+            ->where('category_id', $categoryId)
             ->where('month', $txDate->month)
             ->where('year', $txDate->year)
             ->where('amount', '>', 0)
@@ -167,7 +170,8 @@ class TransactionController extends Controller
 
         if (! $budget) return null;
 
-        $totalSpent = Transaction::where('type', 'expense')
+        $totalSpent = Transaction::where('user_id', auth()->id())
+            ->where('type', 'expense')
             ->where('category_id', $categoryId)
             ->whereMonth('date', $txDate->month)
             ->whereYear('date', $txDate->year)
@@ -213,6 +217,7 @@ class TransactionController extends Controller
                     };
                 }
 
+                $item['user_id'] = auth()->id();
                 $transaction = Transaction::create($item);
 
                 $wallet = $transaction->wallet;

@@ -14,7 +14,7 @@ class WalletController extends Controller
     public function index(): Response
     {
         return Inertia::render('Wallets/Index', [
-            'wallets' => Wallet::withCount('transactions')->orderBy('name')->get(),
+            'wallets' => Wallet::where('user_id', auth()->id())->withCount('transactions')->orderBy('name')->get(),
         ]);
     }
 
@@ -33,6 +33,7 @@ class WalletController extends Controller
             'color'   => 'required|string|max:20',
         ]);
 
+        $validated['user_id'] = auth()->id();
         Wallet::create($validated);
 
         return redirect()->route('wallets.index')->with('success', 'Dompet berhasil ditambahkan.');
@@ -71,6 +72,7 @@ class WalletController extends Controller
 
         if ($oldBalance !== $newBalance) {
             Transaction::create([
+                'user_id'      => auth()->id(),
                 'amount'       => $newBalance,
                 'type'         => 'adjustment',
                 'description'  => $validated['note'] ?: 'Penyesuaian Saldo',

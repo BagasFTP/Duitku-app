@@ -18,7 +18,7 @@ class BudgetController extends Controller
         $period = $request->input('period', 'monthly');
         $year   = $request->integer('year', Carbon::now()->year);
 
-        $categories = Category::where('type', 'expense')->orderBy('name')->get();
+        $categories = Category::where('user_id', auth()->id())->where('type', 'expense')->orderBy('name')->get();
 
         if ($period === 'weekly') {
             $week = $request->integer('week', Carbon::now()->isoWeek());
@@ -27,14 +27,16 @@ class BudgetController extends Controller
             $weekEnd   = $weekStart->copy()->endOfWeek()->endOfDay();
 
             // Budgets set for this exact week
-            $budgets = Budget::where('period_type', 'weekly')
+            $budgets = Budget::where('user_id', auth()->id())
+                ->where('period_type', 'weekly')
                 ->where('week', $week)
                 ->where('year', $year)
                 ->get()
                 ->keyBy('category_id');
 
             // Most recent weekly budget per category (for fallback)
-            $fallbacks = Budget::where('period_type', 'weekly')
+            $fallbacks = Budget::where('user_id', auth()->id())
+                ->where('period_type', 'weekly')
                 ->where(function ($q) use ($week, $year) {
                     $q->where('year', '<', $year)
                       ->orWhere(fn ($q2) => $q2->where('year', $year)->where('week', '<', $week));
@@ -45,7 +47,8 @@ class BudgetController extends Controller
                 ->unique('category_id')
                 ->keyBy('category_id');
 
-            $actuals = Transaction::where('type', 'expense')
+            $actuals = Transaction::where('user_id', auth()->id())
+                ->where('type', 'expense')
                 ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
                 ->selectRaw('category_id, SUM(amount) as total')
                 ->groupBy('category_id')
@@ -83,14 +86,16 @@ class BudgetController extends Controller
         $month = $request->integer('month', Carbon::now()->month);
 
         // Budgets set for this exact month
-        $budgets = Budget::where('period_type', 'monthly')
+        $budgets = Budget::where('user_id', auth()->id())
+            ->where('period_type', 'monthly')
             ->where('month', $month)
             ->where('year', $year)
             ->get()
             ->keyBy('category_id');
 
         // Most recent monthly budget per category (for fallback)
-        $fallbacks = Budget::where('period_type', 'monthly')
+        $fallbacks = Budget::where('user_id', auth()->id())
+            ->where('period_type', 'monthly')
             ->where(function ($q) use ($month, $year) {
                 $q->where('year', '<', $year)
                   ->orWhere(fn ($q2) => $q2->where('year', $year)->where('month', '<', $month));
@@ -101,7 +106,8 @@ class BudgetController extends Controller
             ->unique('category_id')
             ->keyBy('category_id');
 
-        $actuals = Transaction::where('type', 'expense')
+        $actuals = Transaction::where('user_id', auth()->id())
+            ->where('type', 'expense')
             ->whereMonth('date', $month)
             ->whereYear('date', $year)
             ->selectRaw('category_id, SUM(amount) as total')
@@ -157,6 +163,7 @@ class BudgetController extends Controller
         foreach ($validated['budgets'] as $item) {
             Budget::updateOrCreate(
                 [
+                    'user_id'     => auth()->id(),
                     'category_id' => $item['category_id'],
                     'period_type' => $period,
                     'year'        => $year,

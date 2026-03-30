@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Wallet extends Model
 {
     protected $fillable = [
+        'user_id',
         'name',
         'type',
         'balance',

@@ -19,7 +19,7 @@ class AnalysisController extends Controller
         $month = $request->integer('month', Carbon::now()->month);
         $year  = $request->integer('year', Carbon::now()->year);
 
-        $analysis = AiAnalysis::where('month', $month)->where('year', $year)->first();
+        $analysis = AiAnalysis::where('user_id', auth()->id())->where('month', $month)->where('year', $year)->first();
 
         return Inertia::render('Analysis/Index', [
             'analysis' => $analysis,
@@ -39,6 +39,7 @@ class AnalysisController extends Controller
         $year  = $validated['year'];
 
         $transactions = Transaction::with('category')
+            ->where('user_id', auth()->id())
             ->whereMonth('date', $month)
             ->whereYear('date', $year)
             ->get();
@@ -51,7 +52,8 @@ class AnalysisController extends Controller
             ->groupBy('category_id')
             ->map(fn($group) => [
                 'category' => $group->first()->category->name,
-                'budget'   => Budget::where('category_id', $group->first()->category_id)
+                'budget'   => Budget::where('user_id', auth()->id())
+                                ->where('category_id', $group->first()->category_id)
                                 ->where('month', $month)->where('year', $year)
                                 ->value('amount') ?? $group->first()->category->budget ?? 0,
                 'actual'   => $group->sum('amount'),
@@ -73,7 +75,7 @@ class AnalysisController extends Controller
         }
 
         AiAnalysis::updateOrCreate(
-            ['month' => $month, 'year' => $year],
+            ['user_id' => auth()->id(), 'month' => $month, 'year' => $year],
             [
                 'result'       => $result,
                 'health_score' => $result['health_score'] ?? null,

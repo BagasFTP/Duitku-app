@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                 $year  = $now->year;
 
                 $budgets = Budget::with('category')
+                    ->where('user_id', $request->user()->id)
                     ->where('month', $month)
                     ->where('year', $year)
                     ->where('amount', '>', 0)
@@ -61,7 +62,8 @@ class HandleInertiaRequests extends Middleware
                     return [];
                 }
 
-                $actuals = Transaction::where('type', 'expense')
+                $actuals = Transaction::where('user_id', $request->user()->id)
+                    ->where('type', 'expense')
                     ->whereMonth('date', $month)
                     ->whereYear('date', $year)
                     ->whereNotNull('category_id')

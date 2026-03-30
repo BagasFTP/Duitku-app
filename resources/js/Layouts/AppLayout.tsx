@@ -3,6 +3,7 @@ import { PropsWithChildren, useState } from 'react';
 import ChatWidget from '@/Components/ChatWidget';
 import SyncBadge from '@/Components/SyncBadge';
 import BudgetAlertBell from '@/Components/BudgetAlertBell';
+import BudgetToast from '@/Components/BudgetToast';
 import {
     LayoutDashboard,
     ArrowLeftRight,
@@ -156,6 +157,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </div>
         </div>
         <ChatWidget />
+        <BudgetToast />
         </>
     );
 }

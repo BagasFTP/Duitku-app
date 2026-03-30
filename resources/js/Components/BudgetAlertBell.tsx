@@ -20,16 +20,29 @@ export default function BudgetAlertBell() {
     const { budgetAlerts } = usePage<{ auth: any; budgetAlerts: BudgetAlert[] }>().props;
 
     const now = new Date();
-    const storageKey = `budget-alerts-${now.getFullYear()}-${now.getMonth() + 1}`;
-
-    const [open, setOpen] = useState(false);
-    const [seen, setSeen] = useState(() => localStorage.getItem(`${storageKey}-seen`) === 'true');
-    const [cleared, setCleared] = useState(() => localStorage.getItem(`${storageKey}-cleared`) === 'true');
-    const ref = useRef<HTMLDivElement>(null);
+    // Key berubah setiap bulan → semua state auto-reset awal bulan baru
+    const storageKey = `budget-bell-${now.getFullYear()}-${now.getMonth() + 1}`;
 
     const alerts = budgetAlerts ?? [];
-    const overCount = alerts.filter((a) => a.is_over).length;
-    const nearCount = alerts.filter((a) => !a.is_over).length;
+    const overCount  = alerts.filter((a) => a.is_over).length;
+    const nearCount  = alerts.filter((a) => !a.is_over).length;
+
+    // Lacak dua hal secara terpisah:
+    // 1. Jumlah total alert (kategori baru masuk 80%)
+    // 2. Jumlah yang sudah melebihi (near → exceeded = notif baru)
+    const storedSeenCount    = parseInt(localStorage.getItem(`${storageKey}-seenCount`) ?? '0', 10);
+    const storedSeenOverCount = parseInt(localStorage.getItem(`${storageKey}-seenOverCount`) ?? '0', 10);
+    const [seenCount,     setSeenCount]     = useState(storedSeenCount);
+    const [seenOverCount, setSeenOverCount] = useState(storedSeenOverCount);
+
+    // Cleared hanya menyembunyikan daftar pesan di dropdown (bukan ikon)
+    const [cleared, setCleared] = useState(() => localStorage.getItem(`${storageKey}-cleared`) === 'true');
+
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    // Badge muncul jika: ada alert baru ATAU ada yang naik dari "hampir habis" ke "melebihi"
+    const showBadge = !cleared && (alerts.length > seenCount || overCount > seenOverCount);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -44,8 +57,11 @@ export default function BudgetAlertBell() {
 
     const handleOpen = () => {
         setOpen((o) => !o);
-        setSeen(true);
-        localStorage.setItem(`${storageKey}-seen`, 'true');
+        // Tandai status saat ini sudah dilihat
+        setSeenCount(alerts.length);
+        setSeenOverCount(overCount);
+        localStorage.setItem(`${storageKey}-seenCount`,     String(alerts.length));
+        localStorage.setItem(`${storageKey}-seenOverCount`, String(overCount));
     };
 
     if (alerts.length === 0) return null;
@@ -58,7 +74,7 @@ export default function BudgetAlertBell() {
                 title="Notifikasi Anggaran"
             >
                 <Bell size={18} />
-                {!seen && (
+                {showBadge && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
                         {alerts.length > 9 ? '9+' : alerts.length}
                     </span>
@@ -168,7 +184,11 @@ export default function BudgetAlertBell() {
                         <button
                             onClick={() => {
                                 setCleared(true);
-                                localStorage.setItem(`${storageKey}-cleared`, 'true');
+                                setSeenCount(alerts.length);
+                                setSeenOverCount(overCount);
+                                localStorage.setItem(`${storageKey}-cleared`,      'true');
+                                localStorage.setItem(`${storageKey}-seenCount`,     String(alerts.length));
+                                localStorage.setItem(`${storageKey}-seenOverCount`, String(overCount));
                                 setOpen(false);
                             }}
                             className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"

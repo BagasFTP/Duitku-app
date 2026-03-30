@@ -76,7 +76,11 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
     const { auth } = usePage<{ auth: { user: { name: string } } }>().props;
     const monthName = format(new Date(summary.year, summary.month - 1, 1), 'MMMM yyyy', { locale: id });
     const firstName = auth.user.name.split(' ')[0];
-    const [alertDismissed, setAlertDismissed] = useState(false);
+    // Key tersendiri, BERBEDA dari bell — dismiss banner tidak mempengaruhi bell
+    const bannerKey = `budget-banner-${summary.year}-${summary.month}`;
+    const [alertDismissed, setAlertDismissed] = useState(
+        () => localStorage.getItem(bannerKey) === 'true'
+    );
 
     // Compute budget alerts from existing props
     const budgetAlerts = budgets
@@ -156,7 +160,10 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
                                 </Link>
                             </div>
                             <button
-                                onClick={() => setAlertDismissed(true)}
+                                onClick={() => {
+                                    setAlertDismissed(true);
+                                    localStorage.setItem(bannerKey, 'true');
+                                }}
                                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-colors shrink-0"
                             >
                                 <X size={14} />

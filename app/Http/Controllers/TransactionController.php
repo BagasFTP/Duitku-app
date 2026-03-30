@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Budget;
 use App\Models\Transaction;
 use App\Models\Category;
 use App\Models\Wallet;
@@ -83,7 +84,11 @@ class TransactionController extends Controller
             $wallet->decrement('balance', $transaction->amount);
         }
 
-        return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil ditambahkan.');
+        $budgetAlert = $this->checkBudgetAlert($transaction->category_id, $transaction->date);
+
+        return redirect()->route('transactions.index')
+            ->with('success', 'Transaksi berhasil ditambahkan.')
+            ->with('budget_alert', $budgetAlert);
     }
 
     public function edit(Transaction $transaction): Response
@@ -137,7 +142,47 @@ class TransactionController extends Controller
             $newWallet->decrement('balance', $validated['amount']);
         }
 
-        return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil diperbarui.');
+        $budgetAlert = $this->checkBudgetAlert($validated['category_id'], $validated['date']);
+
+        return redirect()->route('transactions.index')
+            ->with('success', 'Transaksi berhasil diperbarui.')
+            ->with('budget_alert', $budgetAlert);
+    }
+
+    private function checkBudgetAlert(?int $categoryId, string $date): ?array
+    {
+        if (! $categoryId) return null;
+
+        $txDate = Carbon::parse($date);
+        $now    = Carbon::now();
+
+        // Hanya cek transaksi bulan ini
+        if ($txDate->month !== $now->month || $txDate->year !== $now->year) return null;
+
+        $budget = Budget::where('category_id', $categoryId)
+            ->where('month', $txDate->month)
+            ->where('year', $txDate->year)
+            ->where('amount', '>', 0)
+            ->first();
+
+        if (! $budget) return null;
+
+        $totalSpent = Transaction::where('type', 'expense')
+            ->where('category_id', $categoryId)
+            ->whereMonth('date', $txDate->month)
+            ->whereYear('date', $txDate->year)
+            ->sum('amount');
+
+        $limit = (float) $budget->amount;
+        $pct   = $limit > 0 ? ($totalSpent / $limit) * 100 : 0;
+
+        if ($pct < 80) return null;
+
+        return [
+            'category'   => $budget->category->name,
+            'percentage' => (int) round($pct),
+            'type'       => $pct >= 100 ? 'over' : 'near',
+        ];
     }
 
     public function syncOffline(Request $request): \Illuminate\Http\JsonResponse

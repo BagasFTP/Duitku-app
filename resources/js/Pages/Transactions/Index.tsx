@@ -29,6 +29,7 @@ interface Transaction {
     date: string;
     is_recurring: boolean;
     recur_type: string | null;
+    next_occurrence_at: string | null;
     category: Category | null;
     wallet: Wallet | null;
 }

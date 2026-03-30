@@ -5,7 +5,8 @@ import ExpensePieChart from '@/Components/Charts/ExpensePieChart';
 import MonthlyBartChart from '@/Components/Charts/MonthlyBartChart';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { TrendingUp, TrendingDown, BarChart2, ArrowRight, Sparkles } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart2, ArrowRight, Sparkles, AlertTriangle, X } from 'lucide-react';
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 

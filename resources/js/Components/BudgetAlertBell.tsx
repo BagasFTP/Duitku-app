@@ -19,6 +19,8 @@ const fmt = (v: number) =>
 export default function BudgetAlertBell() {
     const { budgetAlerts } = usePage<{ auth: any; budgetAlerts: BudgetAlert[] }>().props;
     const [open, setOpen] = useState(false);
+    const [seen, setSeen] = useState(false);
+    const [cleared, setCleared] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
     const alerts = budgetAlerts ?? [];
@@ -36,19 +38,26 @@ export default function BudgetAlertBell() {
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    const handleOpen = () => {
+        setOpen((o) => !o);
+        setSeen(true);
+    };
+
     if (alerts.length === 0) return null;
 
     return (
         <div ref={ref} className="relative">
             <button
-                onClick={() => setOpen((o) => !o)}
+                onClick={handleOpen}
                 className="relative p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
                 title="Notifikasi Anggaran"
             >
                 <Bell size={18} />
-                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
-                    {alerts.length > 9 ? '9+' : alerts.length}
-                </span>
+                {!seen && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
+                        {alerts.length > 9 ? '9+' : alerts.length}
+                    </span>
+                )}
             </button>
 
             {open && (
@@ -68,22 +77,29 @@ export default function BudgetAlertBell() {
                     </div>
 
                     {/* Summary pill */}
-                    <div className="px-4 pt-3 pb-2 flex gap-2">
-                        {overCount > 0 && (
-                            <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
-                                <AlertTriangle size={10} /> {overCount} terlampaui
-                            </span>
-                        )}
-                        {nearCount > 0 && (
-                            <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                                <TrendingDown size={10} /> {nearCount} hampir habis
-                            </span>
-                        )}
-                    </div>
+                    {!cleared && (
+                        <div className="px-4 pt-3 pb-2 flex gap-2">
+                            {overCount > 0 && (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+                                    <AlertTriangle size={10} /> {overCount} terlampaui
+                                </span>
+                            )}
+                            {nearCount > 0 && (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                                    <TrendingDown size={10} /> {nearCount} hampir habis
+                                </span>
+                            )}
+                        </div>
+                    )}
 
                     {/* Alert list */}
                     <div className="max-h-72 overflow-y-auto px-3 pb-3 space-y-2">
-                        {alerts.map((alert, i) => (
+                        {cleared ? (
+                            <div className="py-6 flex flex-col items-center gap-2 text-slate-400">
+                                <Bell size={22} className="opacity-40" />
+                                <p className="text-xs">Tidak ada notifikasi</p>
+                            </div>
+                        ) : alerts.map((alert, i) => (
                             <div
                                 key={i}
                                 className={`rounded-xl p-3 border ${
@@ -136,14 +152,20 @@ export default function BudgetAlertBell() {
                     </div>
 
                     {/* Footer */}
-                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
+                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
                         <Link
                             href="/budget"
                             onClick={() => setOpen(false)}
-                            className="block text-center text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
                         >
                             Kelola Anggaran →
                         </Link>
+                        <button
+                            onClick={() => { setCleared(true); setOpen(false); }}
+                            className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                            Hapus Notifikasi
+                        </button>
                     </div>
                 </div>
             )}

@@ -76,6 +76,22 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
     const { auth } = usePage<{ auth: { user: { name: string } } }>().props;
     const monthName = format(new Date(summary.year, summary.month - 1, 1), 'MMMM yyyy', { locale: id });
     const firstName = auth.user.name.split(' ')[0];
+    const [alertDismissed, setAlertDismissed] = useState(false);
+
+    // Compute budget alerts from existing props
+    const budgetAlerts = budgets
+        .map((budget) => {
+            const spent = expenseByCategory.find((e) => e.category.id === budget.category_id);
+            const actual = Number(spent?.total ?? 0);
+            const limit = Number(budget.amount);
+            const pct = limit > 0 ? (actual / limit) * 100 : 0;
+            return { budget, actual, limit, pct, isOver: pct >= 100, isNear: pct >= 80 && pct < 100 };
+        })
+        .filter((a) => a.isOver || a.isNear)
+        .sort((a, b) => b.pct - a.pct);
+
+    const overCount = budgetAlerts.filter((a) => a.isOver).length;
+    const nearCount = budgetAlerts.filter((a) => a.isNear).length;
 
     return (
         <AppLayout>
@@ -106,6 +122,48 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
                         </div>
                     </div>
                 </div>
+
+                {/* Budget Alert Banner */}
+                {budgetAlerts.length > 0 && !alertDismissed && (
+                    <div className={`rounded-2xl border p-4 ${overCount > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                        <div className="flex items-start gap-3">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${overCount > 0 ? 'bg-red-100' : 'bg-amber-100'}`}>
+                                <AlertTriangle size={16} className={overCount > 0 ? 'text-red-600' : 'text-amber-600'} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-semibold ${overCount > 0 ? 'text-red-800' : 'text-amber-800'}`}>
+                                    {overCount > 0
+                                        ? `${overCount} anggaran terlampaui${nearCount > 0 ? ` · ${nearCount} hampir habis` : ''}`
+                                        : `${nearCount} anggaran hampir habis`}
+                                </p>
+                                <div className="mt-2 space-y-1.5">
+                                    {budgetAlerts.map((a, i) => (
+                                        <div key={i} className="flex items-center justify-between text-xs">
+                                            <span className="text-slate-700 font-medium truncate">
+                                                {a.budget.category.name}
+                                            </span>
+                                            <span className={`shrink-0 ml-2 font-bold ${a.isOver ? 'text-red-600' : 'text-amber-600'}`}>
+                                                {Math.round(a.pct)}% {a.isOver ? '— Melebihi ' + formatRupiah(a.actual - a.limit) : ''}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Link
+                                    href="/budget"
+                                    className={`inline-block mt-3 text-xs font-semibold underline underline-offset-2 ${overCount > 0 ? 'text-red-700 hover:text-red-900' : 'text-amber-700 hover:text-amber-900'}`}
+                                >
+                                    Kelola Anggaran →
+                                </Link>
+                            </div>
+                            <button
+                                onClick={() => setAlertDismissed(true)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-colors shrink-0"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4">

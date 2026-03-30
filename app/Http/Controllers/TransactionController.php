@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\Category;
 use App\Models\Wallet;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -63,6 +64,15 @@ class TransactionController extends Controller
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
 
+        if (!empty($validated['is_recurring']) && !empty($validated['recur_type'])) {
+            $base = Carbon::parse($validated['date']);
+            $validated['next_occurrence_at'] = match ($validated['recur_type']) {
+                'daily'   => $base->copy()->addDay()->toDateString(),
+                'weekly'  => $base->copy()->addWeek()->toDateString(),
+                'monthly' => $base->copy()->addMonth()->toDateString(),
+            };
+        }
+
         $transaction = Transaction::create($validated);
 
         // Update saldo wallet
@@ -97,6 +107,17 @@ class TransactionController extends Controller
             'is_recurring' => 'boolean',
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
+
+        if (!empty($validated['is_recurring']) && !empty($validated['recur_type'])) {
+            $base = Carbon::parse($validated['date']);
+            $validated['next_occurrence_at'] = match ($validated['recur_type']) {
+                'daily'   => $base->copy()->addDay()->toDateString(),
+                'weekly'  => $base->copy()->addWeek()->toDateString(),
+                'monthly' => $base->copy()->addMonth()->toDateString(),
+            };
+        } else {
+            $validated['next_occurrence_at'] = null;
+        }
 
         // Revert saldo wallet lama
         $oldWallet = $transaction->wallet;

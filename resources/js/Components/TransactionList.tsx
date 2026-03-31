@@ -15,7 +15,7 @@ interface Wallet {
 interface Transaction {
     id: number;
     amount: string;
-    type: 'income' | 'expense';
+    type: 'income' | 'expense' | 'adjustment';
     description: string;
     date: string;
     category: Category | null;
@@ -60,8 +60,12 @@ export default function TransactionList({ transactions }: Props) {
                             {format(new Date(trx.date), 'd MMM yyyy', { locale: id })} · {trx.wallet?.name ?? '-'}
                         </p>
                     </div>
-                    <span className={`text-sm font-semibold shrink-0 ${trx.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {trx.type === 'income' ? '+' : '-'} {formatRupiah(Number(trx.amount))}
+                    <span className={`text-sm font-semibold shrink-0 ${
+                        trx.type === 'income' ? 'text-emerald-600' :
+                        trx.type === 'expense' ? 'text-red-500' :
+                        'text-slate-400'
+                    }`}>
+                        {trx.type === 'income' ? '+' : trx.type === 'expense' ? '-' : '='} {formatRupiah(Number(trx.amount))}
                     </span>
                 </div>
             ))}

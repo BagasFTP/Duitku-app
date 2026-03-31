@@ -9,6 +9,7 @@ use App\Models\Wallet;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -88,6 +89,8 @@ class TransactionController extends Controller
 
         $budgetAlert = $this->checkBudgetAlert($transaction->category_id, $transaction->date);
 
+        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
+
         return redirect()->route('transactions.index')
             ->with('success', 'Transaksi berhasil ditambahkan.')
             ->with('budget_alert', $budgetAlert);
@@ -146,9 +149,16 @@ class TransactionController extends Controller
 
         $budgetAlert = $this->checkBudgetAlert($validated['category_id'], $validated['date']);
 
+        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($validated['date']));
+
         return redirect()->route('transactions.index')
             ->with('success', 'Transaksi berhasil diperbarui.')
             ->with('budget_alert', $budgetAlert);
+    }
+
+    private function forgetBudgetAlertCache(int $userId, Carbon $date): void
+    {
+        Cache::forget("budget_alerts_{$userId}_{$date->year}_{$date->month}");
     }
 
     private function checkBudgetAlert(?int $categoryId, string $date): ?array
@@ -247,6 +257,8 @@ class TransactionController extends Controller
                 $wallet->increment('balance', $transaction->amount);
             }
         }
+
+        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
 
         $transaction->delete();
 

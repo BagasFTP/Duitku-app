@@ -3,9 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Models\Budget;
+use App\Models\Category;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -47,53 +49,83 @@ class HandleInertiaRequests extends Middleware
                     return [];
                 }
 
-                $now   = Carbon::now();
-                $month = $now->month;
-                $year  = $now->year;
+                $now    = Carbon::now();
+                $month  = $now->month;
+                $year   = $now->year;
+                $userId = $request->user()->id;
 
-                $budgets = Budget::with('category')
-                    ->where('user_id', $request->user()->id)
-                    ->where('month', $month)
-                    ->where('year', $year)
-                    ->where('amount', '>', 0)
-                    ->get();
+                return Cache::remember("budget_alerts_{$userId}_{$year}_{$month}", 300, function () use ($userId, $month, $year) {
+                    // Budget records bulan ini
+                    $monthlyBudgets = Budget::where('user_id', $userId)
+                        ->where('period_type', 'monthly')
+                        ->where('month', $month)
+                        ->where('year', $year)
+                        ->pluck('amount', 'category_id');
 
-                if ($budgets->isEmpty()) {
-                    return [];
-                }
+                    // Fallback: budget record bulan sebelumnya per kategori
+                    $fallbackBudgets = Budget::where('user_id', $userId)
+                        ->where('period_type', 'monthly')
+                        ->where(function ($q) use ($month, $year) {
+                            $q->where('year', '<', $year)
+                              ->orWhere(fn ($q2) => $q2->where('year', $year)->where('month', '<', $month));
+                        })
+                        ->orderBy('year', 'desc')
+                        ->orderBy('month', 'desc')
+                        ->get()
+                        ->unique('category_id')
+                        ->pluck('amount', 'category_id');
 
-                $actuals = Transaction::where('user_id', $request->user()->id)
-                    ->where('type', 'expense')
-                    ->whereMonth('date', $month)
-                    ->whereYear('date', $year)
-                    ->whereNotNull('category_id')
-                    ->selectRaw('category_id, SUM(amount) as total')
-                    ->groupBy('category_id')
-                    ->pluck('total', 'category_id');
+                    // Semua kategori expense user (termasuk category.budget sebagai fallback terakhir)
+                    $categories = Category::where('user_id', $userId)
+                        ->where('type', 'expense')
+                        ->get()
+                        ->keyBy('id');
 
-                $alerts = [];
-                foreach ($budgets as $budget) {
-                    $actual = (float) ($actuals[$budget->category_id] ?? 0);
-                    $limit  = (float) $budget->amount;
-                    $pct    = $limit > 0 ? ($actual / $limit) * 100 : 0;
-
-                    if ($pct >= 80) {
-                        $alerts[] = [
-                            'category_name'  => $budget->category->name,
-                            'category_icon'  => $budget->category->icon,
-                            'category_color' => $budget->category->color,
-                            'actual'         => $actual,
-                            'limit'          => $limit,
-                            'percentage'     => (int) round($pct),
-                            'is_over'        => $pct >= 100,
-                        ];
+                    // Tentukan limit efektif per kategori
+                    $limits = [];
+                    foreach ($categories as $catId => $category) {
+                        $limit = (float) ($monthlyBudgets[$catId] ?? $fallbackBudgets[$catId] ?? $category->budget ?? 0);
+                        if ($limit > 0) {
+                            $limits[$catId] = $limit;
+                        }
                     }
-                }
 
-                // Sort: exceeded first, then by percentage desc
-                usort($alerts, fn($a, $b) => $b['percentage'] <=> $a['percentage']);
+                    if (empty($limits)) {
+                        return [];
+                    }
 
-                return $alerts;
+                    $actuals = Transaction::where('user_id', $userId)
+                        ->where('type', 'expense')
+                        ->whereMonth('date', $month)
+                        ->whereYear('date', $year)
+                        ->whereIn('category_id', array_keys($limits))
+                        ->selectRaw('category_id, SUM(amount) as total')
+                        ->groupBy('category_id')
+                        ->pluck('total', 'category_id');
+
+                    $alerts = [];
+                    foreach ($limits as $catId => $limit) {
+                        $actual = (float) ($actuals[$catId] ?? 0);
+                        $pct    = ($actual / $limit) * 100;
+
+                        if ($pct >= 80) {
+                            $category  = $categories[$catId];
+                            $alerts[]  = [
+                                'category_name'  => $category->name,
+                                'category_icon'  => $category->icon,
+                                'category_color' => $category->color,
+                                'actual'         => $actual,
+                                'limit'          => $limit,
+                                'percentage'     => (int) round($pct),
+                                'is_over'        => $pct >= 100,
+                            ];
+                        }
+                    }
+
+                    usort($alerts, fn($a, $b) => $b['percentage'] <=> $a['percentage']);
+
+                    return $alerts;
+                });
             },
         ];
     }

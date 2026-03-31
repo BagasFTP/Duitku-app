@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -172,6 +173,10 @@ class BudgetController extends Controller
                 ],
                 ['amount' => $item['amount']]
             );
+        }
+
+        if ($period === 'monthly' && $month) {
+            Cache::forget('budget_alerts_' . auth()->id() . "_{$year}_{$month}");
         }
 
         $redirect = ['period' => $period, 'year' => $year];

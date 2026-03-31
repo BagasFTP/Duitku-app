@@ -71,11 +71,15 @@ class WalletController extends Controller
         $newBalance = (float) $validated['new_balance'];
 
         if ($oldBalance !== $newBalance) {
+            $delta       = abs($newBalance - $oldBalance);
+            $fmt         = fn (float $v) => 'Rp ' . number_format($v, 0, ',', '.');
+            $autoDesc    = 'Penyesuaian: ' . $fmt($oldBalance) . ' → ' . $fmt($newBalance);
+
             Transaction::create([
                 'user_id'      => auth()->id(),
-                'amount'       => $newBalance,
+                'amount'       => $delta,
                 'type'         => 'adjustment',
-                'description'  => $validated['note'] ?: 'Penyesuaian Saldo',
+                'description'  => $validated['note'] ?: $autoDesc,
                 'date'         => now()->toDateString(),
                 'category_id'  => null,
                 'wallet_id'    => $wallet->id,

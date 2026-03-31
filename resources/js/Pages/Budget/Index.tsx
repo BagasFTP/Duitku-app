@@ -38,6 +38,7 @@ interface Props {
     year: number;
     weekStart: string | null;
     weekEnd: string | null;
+    monthlyLimits: Record<number, number> | null;
 }
 
 const fmt = (v: number) =>
@@ -70,7 +71,7 @@ function isoWeekToDate(year: number, week: number): Date {
     return new Date(startW1.getTime() + (week - 1) * 7 * 24 * 60 * 60 * 1000);
 }
 
-export default function BudgetIndex({ budgetData, period, month, week, year, weekStart, weekEnd }: Props) {
+export default function BudgetIndex({ budgetData, period, month, week, year, weekStart, weekEnd, monthlyLimits }: Props) {
     const flash = usePage<{ flash?: { success?: string; error?: string } }>().props.flash;
 
     const [activePeriod, setActivePeriod] = useState<'monthly' | 'weekly'>(period);
@@ -274,18 +275,20 @@ export default function BudgetIndex({ budgetData, period, month, week, year, wee
                 ) : (
                     <div className="space-y-3">
                         {budgetData.map((item) => {
-                            const rawVal   = amounts[item.category.id] ?? '';
-                            const limitVal = rawVal ? Number(rawVal) : 0;
-                            const pct      = limitVal > 0 ? Math.round((Number(item.actual) / limitVal) * 100) : 0;
-                            const isOver   = limitVal > 0 && Number(item.actual) > limitVal;
-                            const isNear   = !isOver && pct >= 80;
-                            const color    = item.category.color ?? '#6366f1';
+                            const rawVal      = amounts[item.category.id] ?? '';
+                            const limitVal    = rawVal ? Number(rawVal) : 0;
+                            const pct         = limitVal > 0 ? Math.round((Number(item.actual) / limitVal) * 100) : 0;
+                            const isOver      = limitVal > 0 && Number(item.actual) > limitVal;
+                            const isNear      = !isOver && pct >= 80;
+                            const color       = item.category.color ?? '#6366f1';
+                            const monthlyMax  = monthlyLimits?.[item.category.id] ?? 0;
+                            const exceedsMonthly = period === 'weekly' && monthlyMax > 0 && limitVal > monthlyMax;
 
                             return (
                                 <div
                                     key={item.category.id}
                                     className={`bg-white rounded-2xl border shadow-sm p-4 transition-all duration-200 hover:shadow-md ${
-                                        isOver ? 'border-red-200' : isNear ? 'border-amber-200' : 'border-slate-100'
+                                        exceedsMonthly ? 'border-orange-300' : isOver ? 'border-red-200' : isNear ? 'border-amber-200' : 'border-slate-100'
                                     }`}
                                 >
                                     <div className="flex items-center gap-3 mb-3">
@@ -331,10 +334,29 @@ export default function BudgetIndex({ budgetData, period, month, week, year, wee
                                                     setAmounts((prev) => ({ ...prev, [item.category.id]: raw }));
                                                 }}
                                                 placeholder="0"
-                                                className="w-36 rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition placeholder-slate-400 text-right"
+                                                className={`w-36 rounded-xl border pl-8 pr-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:border-transparent transition placeholder-slate-400 text-right ${
+                                                    exceedsMonthly
+                                                        ? 'border-orange-400 focus:ring-orange-400'
+                                                        : 'border-slate-200 focus:ring-indigo-400'
+                                                }`}
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Warning: weekly exceeds monthly */}
+                                    {exceedsMonthly && (
+                                        <p className="text-xs text-orange-600 font-medium mt-1 mb-2 flex items-center gap-1">
+                                            <AlertTriangle size={11} />
+                                            Melebihi anggaran bulanan ({fmt(monthlyMax)}). Kurangi nominal.
+                                        </p>
+                                    )}
+
+                                    {/* Monthly reference when in weekly mode */}
+                                    {period === 'weekly' && monthlyMax > 0 && !exceedsMonthly && (
+                                        <p className="text-xs text-slate-400 mt-1 mb-2">
+                                            Maks. mingguan: {fmt(monthlyMax)} (batas bulanan)
+                                        </p>
+                                    )}
 
                                     {/* Progress bar */}
                                     <ProgressBar pct={pct} color={color} />

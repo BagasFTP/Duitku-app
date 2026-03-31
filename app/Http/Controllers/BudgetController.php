@@ -72,14 +72,32 @@ class BudgetController extends Controller
                 ];
             });
 
+            // Anggaran bulanan pada bulan yang mengandung awal minggu ini (untuk referensi & validasi)
+            $checkMonth    = $weekStart->month;
+            $checkYear     = $weekStart->year;
+            $monthlyLimits = Budget::where('user_id', auth()->id())
+                ->where('period_type', 'monthly')
+                ->where('year', $checkYear)
+                ->where('month', $checkMonth)
+                ->pluck('amount', 'category_id')
+                ->map(fn ($v) => (float) $v);
+
+            // Fallback ke category.budget jika tidak ada budget record bulanan
+            foreach ($categories as $cat) {
+                if (! isset($monthlyLimits[$cat->id]) && $cat->budget > 0) {
+                    $monthlyLimits[$cat->id] = (float) $cat->budget;
+                }
+            }
+
             return Inertia::render('Budget/Index', [
-                'budgetData' => $budgetData,
-                'period'     => 'weekly',
-                'week'       => $week,
-                'year'       => $year,
-                'weekStart'  => $weekStart->toDateString(),
-                'weekEnd'    => $weekEnd->toDateString(),
-                'month'      => null,
+                'budgetData'    => $budgetData,
+                'period'        => 'weekly',
+                'week'          => $week,
+                'year'          => $year,
+                'weekStart'     => $weekStart->toDateString(),
+                'weekEnd'       => $weekEnd->toDateString(),
+                'month'         => null,
+                'monthlyLimits' => $monthlyLimits,
             ]);
         }
 
@@ -134,13 +152,14 @@ class BudgetController extends Controller
         });
 
         return Inertia::render('Budget/Index', [
-            'budgetData' => $budgetData,
-            'period'     => 'monthly',
-            'month'      => $month,
-            'year'       => $year,
-            'week'       => null,
-            'weekStart'  => null,
-            'weekEnd'    => null,
+            'budgetData'    => $budgetData,
+            'period'        => 'monthly',
+            'month'         => $month,
+            'year'          => $year,
+            'week'          => null,
+            'weekStart'     => null,
+            'weekEnd'       => null,
+            'monthlyLimits' => null,
         ]);
     }
 
@@ -160,6 +179,39 @@ class BudgetController extends Controller
         $year   = $validated['year'];
         $month  = $validated['month'] ?? null;
         $week   = $validated['week'] ?? null;
+
+        // Validasi: anggaran mingguan tidak boleh melebihi anggaran bulanan
+        if ($period === 'weekly' && $week) {
+            $weekStart  = Carbon::now()->setISODate($year, $week)->startOfDay();
+            $checkMonth = $weekStart->month;
+            $checkYear  = $weekStart->year;
+
+            $categoryIds    = collect($validated['budgets'])->pluck('category_id')->toArray();
+            $monthlyBudgets = Budget::where('user_id', auth()->id())
+                ->where('period_type', 'monthly')
+                ->where('year', $checkYear)
+                ->where('month', $checkMonth)
+                ->whereIn('category_id', $categoryIds)
+                ->pluck('amount', 'category_id');
+
+            // Fallback ke category.budget jika tidak ada budget record bulanan
+            $categoryBudgets = Category::whereIn('id', $categoryIds)
+                ->where('user_id', auth()->id())
+                ->pluck('budget', 'id');
+
+            foreach ($validated['budgets'] as $item) {
+                $catId        = $item['category_id'];
+                $weeklyAmount = (float) $item['amount'];
+                $monthlyLimit = (float) ($monthlyBudgets[$catId] ?? $categoryBudgets[$catId] ?? 0);
+
+                if ($monthlyLimit > 0 && $weeklyAmount > $monthlyLimit) {
+                    $fmt = fn ($v) => 'Rp ' . number_format($v, 0, ',', '.');
+                    return redirect()->back()
+                        ->withInput()
+                        ->with('error', "Anggaran mingguan ({$fmt($weeklyAmount)}) tidak boleh melebihi anggaran bulanan ({$fmt($monthlyLimit)}) untuk salah satu kategori.");
+                }
+            }
+        }
 
         foreach ($validated['budgets'] as $item) {
             Budget::updateOrCreate(

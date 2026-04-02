@@ -40,6 +40,8 @@ class CategoryController extends Controller
 
     public function edit(Category $category): Response
     {
+        abort_if($category->user_id !== auth()->id(), 403);
+
         return Inertia::render('Categories/Edit', [
             'category' => $category,
         ]);
@@ -47,6 +49,8 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category): RedirectResponse
     {
+        abort_if($category->user_id !== auth()->id(), 403);
+
         $validated = $request->validate([
             'name'   => 'required|string|max:100',
             'icon'   => 'required|string|max:50',
@@ -62,6 +66,8 @@ class CategoryController extends Controller
 
     public function destroy(Category $category): RedirectResponse
     {
+        abort_if($category->user_id !== auth()->id(), 403);
+
         if ($category->is_default) {
             return redirect()->route('categories.index')->with('error', 'Kategori default tidak bisa dihapus.');
         }

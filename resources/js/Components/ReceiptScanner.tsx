@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
-import { Camera, X, Loader2, ScanLine, ImagePlus, Video, CircleDot, ZoomIn, RefreshCw } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import { Camera, X, Loader2, ScanLine, ImagePlus, Video, CircleDot, ZoomIn, RefreshCw, History } from 'lucide-react';
 
 interface ScannedData {
+    scan_id: number;
     amount: string;
     type: 'income' | 'expense';
     description: string;
@@ -108,15 +110,25 @@ export default function ReceiptScanner({ onScanned }: Props) {
 
     return (
         <>
-            {/* Tombol scan / scan ulang */}
-            <button
-                type="button"
-                onClick={() => { setOpen(true); reset(); }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition w-full justify-center"
-            >
-                <ScanLine size={16} />
-                {scannedPreview ? 'Scan Ulang' : 'Scan Struk Belanja'}
-            </button>
+            {/* Tombol scan / scan ulang + link riwayat */}
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => { setOpen(true); reset(); }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition flex-1 justify-center"
+                >
+                    <ScanLine size={16} />
+                    {scannedPreview ? 'Scan Ulang' : 'Scan Struk Belanja'}
+                </button>
+                <Link
+                    href="/receipt/history"
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 text-slate-500 text-xs font-medium hover:bg-slate-50 hover:text-indigo-600 transition shrink-0"
+                    title="Riwayat Scan"
+                >
+                    <History size={15} />
+                    <span className="hidden sm:inline">Riwayat</span>
+                </Link>
+            </div>
 
             {/* Thumbnail struk hasil scan */}
             {scannedPreview && !open && (

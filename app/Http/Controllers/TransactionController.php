@@ -259,8 +259,8 @@ class TransactionController extends Controller
             'items.*.type'         => 'required|in:income,expense',
             'items.*.description'  => 'nullable|string|max:255',
             'items.*.date'         => 'required|date',
-            'items.*.category_id'  => 'required|exists:categories,id',
-            'items.*.wallet_id'    => 'required|exists:wallets,id',
+            'items.*.category_id'  => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
+            'items.*.wallet_id'    => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
             'items.*.is_recurring' => 'boolean',
             'items.*.recur_type'   => 'nullable|in:daily,weekly,monthly',
         ]);

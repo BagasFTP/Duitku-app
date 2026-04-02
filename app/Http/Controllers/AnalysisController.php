@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AiAnalysis;
 use App\Models\Budget;
+use App\Models\SavingsGoal;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,7 +61,17 @@ class AnalysisController extends Controller
             ])
             ->values();
 
-        $prompt = $this->buildPrompt($month, $year, $totalIncome, $totalExpense, $expenseByCategory->toArray());
+        $savingsGoals = SavingsGoal::where('user_id', auth()->id())
+            ->where('is_completed', false)
+            ->get(['name', 'target_amount', 'current_amount', 'deadline'])
+            ->map(fn($g) => [
+                'name'           => (string) $g->name,
+                'target_amount'  => (float) $g->target_amount,
+                'current_amount' => (float) $g->current_amount,
+                'deadline'       => $g->deadline?->format('Y-m-d'),
+            ])->toArray();
+
+        $prompt = $this->buildPrompt($month, $year, $totalIncome, $totalExpense, $expenseByCategory->toArray(), $savingsGoals);
 
         if (!config('services.groq.key')) {
             return redirect()->route('analysis.index', ['month' => $month, 'year' => $year])
@@ -86,15 +97,24 @@ class AnalysisController extends Controller
             ->with('success', 'Analisis AI berhasil dibuat.');
     }
 
-    private function buildPrompt(int $month, int $year, float $income, float $expense, array $categories): string
+    private function buildPrompt(int $month, int $year, float $income, float $expense, array $categories, array $savingsGoals = []): string
     {
-        $monthName  = Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y');
-        $balance    = $income - $expense;
+        $monthName     = Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y');
+        $balance       = $income - $expense;
         $categoryLines = collect($categories)->map(function ($item) {
             $pct = $item['budget'] > 0 ? round(($item['actual'] / $item['budget']) * 100) : 0;
             return "- {$item['category']}: budget Rp " . number_format($item['budget'], 0, ',', '.') .
                    ", aktual Rp " . number_format($item['actual'], 0, ',', '.') . " ({$pct}%)";
         })->join("\n");
+
+        $savingsLines = empty($savingsGoals)
+            ? '- Tidak ada target tabungan aktif.'
+            : collect($savingsGoals)->map(function ($g) {
+                $pct      = $g['target_amount'] > 0 ? round(($g['current_amount'] / $g['target_amount']) * 100) : 0;
+                $deadline = $g['deadline'] ? ", deadline: {$g['deadline']}" : '';
+                return "- {$g['name']}: Rp " . number_format($g['current_amount'], 0, ',', '.') .
+                       " / Rp " . number_format($g['target_amount'], 0, ',', '.') . " ({$pct}%{$deadline})";
+            })->join("\n");
 
         return <<<PROMPT
 Kamu adalah asisten keuangan pribadi. Analisis data keuangan bulan {$monthName}:
@@ -105,6 +125,9 @@ Sisa             : Rp {$this->fmt($balance)}
 
 Pengeluaran per kategori:
 {$categoryLines}
+
+Target tabungan aktif:
+{$savingsLines}
 
 Berikan respons dalam format JSON dengan struktur berikut:
 {

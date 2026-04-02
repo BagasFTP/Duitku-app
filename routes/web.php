@@ -40,7 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Chat
     Route::get('/chat/history', [ChatController::class, 'history'])->name('chat.history');
-    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
+    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send')->middleware('throttle:30,1');
     Route::post('/chat/clear', [ChatController::class, 'clear'])->name('chat.clear');
 
     // AI Analysis
@@ -49,6 +49,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Receipt Scanner
     Route::post('/receipt/scan', [ReceiptController::class, 'scan'])->name('receipt.scan')->middleware('throttle:10,1');
+    Route::get('/receipt/history', [ReceiptController::class, 'history'])->name('receipt.history');
+    Route::post('/receipt/{scan}/transaction', [ReceiptController::class, 'saveToTransaction'])->name('receipt.save-transaction');
+    Route::delete('/receipt/{scan}', [ReceiptController::class, 'destroy'])->name('receipt.destroy');
 });
 
 require __DIR__.'/auth.php';

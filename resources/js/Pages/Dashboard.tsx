@@ -5,7 +5,7 @@ import ExpensePieChart from '@/Components/Charts/ExpensePieChart';
 import MonthlyBartChart from '@/Components/Charts/MonthlyBartChart';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { TrendingUp, TrendingDown, BarChart2, ArrowRight, Sparkles, AlertTriangle, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart2, ArrowRight, Sparkles, AlertTriangle, X, Target, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -61,18 +61,30 @@ interface Summary {
     year: number;
 }
 
+interface SavingsGoal {
+    id: number;
+    name: string;
+    icon: string;
+    color: string;
+    target_amount: string;
+    current_amount: string;
+    deadline: string | null;
+    is_completed: boolean;
+}
+
 interface Props {
     summary: Summary;
     recentTransactions: Transaction[];
     expenseByCategory: ExpenseByCategory[];
     budgets: Budget[];
     wallets: WalletItem[];
+    savingsGoals: SavingsGoal[];
 }
 
 const formatRupiah = (value: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 
-export default function Dashboard({ summary, recentTransactions, expenseByCategory, budgets, wallets }: Props) {
+export default function Dashboard({ summary, recentTransactions, expenseByCategory, budgets, wallets, savingsGoals }: Props) {
     const { auth } = usePage<{ auth: { user: { name: string } } }>().props;
     const monthName = format(new Date(summary.year, summary.month - 1, 1), 'MMMM yyyy', { locale: id });
     const firstName = auth.user.name.split(' ')[0];
@@ -255,6 +267,69 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
                         <ExpensePieChart data={expenseByCategory} />
                     </div>
                 </div>
+
+                {/* Savings Goals */}
+                {savingsGoals.length > 0 && (
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                                    <Target size={14} className="text-violet-600" />
+                                </div>
+                                <h2 className="font-bold text-slate-700">Target Tabungan</h2>
+                            </div>
+                            <Link href="/savings" className="group text-xs text-indigo-600 flex items-center gap-1 font-medium hover:text-indigo-800 transition-colors">
+                                Lihat semua <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                            </Link>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {savingsGoals.map((goal) => {
+                                const current = Number(goal.current_amount);
+                                const target  = Number(goal.target_amount);
+                                const pct     = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+                                return (
+                                    <div key={goal.id} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-200">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div
+                                                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                                                style={{ backgroundColor: (goal.color ?? '#6366f1') + '20' }}
+                                            >
+                                                <DynamicIcon name={goal.icon ?? 'Target'} size={18} style={{ color: goal.color ?? '#6366f1' }} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-slate-800 truncate">{goal.name}</p>
+                                                {goal.deadline && (
+                                                    <p className="text-xs text-slate-400">
+                                                        Deadline: {format(new Date(goal.deadline), 'd MMM yyyy', { locale: id })}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {goal.is_completed && (
+                                                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                            )}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between text-xs text-slate-500">
+                                                <span>{formatRupiah(current)}</span>
+                                                <span className="font-medium">{Math.round(pct)}%</span>
+                                            </div>
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full transition-all duration-500"
+                                                    style={{
+                                                        width: `${pct}%`,
+                                                        backgroundColor: goal.color ?? '#6366f1',
+                                                    }}
+                                                />
+                                            </div>
+                                            <p className="text-xs text-slate-400 text-right">Target: {formatRupiah(target)}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 {/* Budget + Transactions */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

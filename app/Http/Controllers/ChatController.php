@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Budget;
 use App\Models\Category;
 use App\Models\ChatMessage;
+use App\Models\SavingsGoal;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use Illuminate\Http\JsonResponse;
@@ -103,6 +104,26 @@ class ChatController extends Controller
                 ($t->type === 'income' ? '+' : '-') . 'Rp ' . number_format($t->amount, 0, ',', '.'))
             ->join("\n");
 
+        // Savings goals
+        $savingsGoals = SavingsGoal::where('user_id', auth()->id())
+            ->orderBy('is_completed')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $savingsLines = $savingsGoals->isEmpty()
+            ? '- Belum ada target tabungan.'
+            : $savingsGoals->map(function ($g) {
+                $current  = (float) $g->current_amount;
+                $target   = (float) $g->target_amount;
+                $pct      = $target > 0 ? round(($current / $target) * 100) : 0;
+                $status   = $g->is_completed ? 'Selesai' : "Progres {$pct}%";
+                $deadline = $g->deadline ? ', deadline: ' . $g->deadline->format('d M Y') : '';
+                $name     = (string) $g->name;
+                return "- {$name}: Rp " . number_format($current, 0, ',', '.') .
+                       " / Rp " . number_format($target, 0, ',', '.') .
+                       " ({$status}{$deadline})";
+            })->join("\n");
+
         $monthName = $now->translatedFormat('F Y');
 
         return <<<CONTEXT
@@ -121,6 +142,9 @@ PENGELUARAN PER KATEGORI:
 
 STATUS ANGGARAN:
 {$budgetLines}
+
+TARGET TABUNGAN:
+{$savingsLines}
 
 5 TRANSAKSI TERAKHIR:
 {$recent}

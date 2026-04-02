@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SavingsGoal;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\Budget;
@@ -44,6 +45,12 @@ class DashboardController extends Controller
 
         $wallets = Wallet::where('user_id', auth()->id())->orderBy('name')->get();
 
+        $savingsGoals = SavingsGoal::where('user_id', auth()->id())
+            ->orderBy('is_completed')
+            ->orderByDesc('created_at')
+            ->limit(4)
+            ->get(['id', 'name', 'icon', 'color', 'target_amount', 'current_amount', 'deadline', 'is_completed']);
+
         return Inertia::render('Dashboard', [
             'summary' => [
                 'income'  => $totalIncome,
@@ -56,6 +63,7 @@ class DashboardController extends Controller
             'expenseByCategory'   => $expenseByCategory,
             'budgets'             => $budgets,
             'wallets'             => $wallets,
+            'savingsGoals'        => $savingsGoals,
         ]);
     }
 }

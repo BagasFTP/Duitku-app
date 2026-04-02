@@ -12,6 +12,7 @@ import {
     PiggyBank,
     BrainCircuit,
     Target,
+    ScanLine,
     LogOut,
     User,
     Menu,
@@ -26,6 +27,7 @@ const navItems = [
     { label: 'Anggaran',     href: '/budget',      icon: PiggyBank,       routeName: 'budget.index'       },
     { label: 'Target Nabung',href: '/savings',     icon: Target,          routeName: 'savings.index'      },
     { label: 'Analisis AI',  href: '/analysis',    icon: BrainCircuit,    routeName: 'analysis.index'     },
+    { label: 'Riwayat Struk', href: '/receipt/history', icon: ScanLine, routeName: 'receipt.history'    },
 ];
 
 function SidebarContent({ user, onNavClick }: { user: { name: string; email: string }; onNavClick?: () => void }) {

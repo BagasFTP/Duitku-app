@@ -2,10 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Budget;
 use App\Models\Category;
+use App\Models\ReceiptScan;
+use App\Models\Transaction;
+use App\Models\Wallet;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ReceiptController extends Controller
 {
@@ -111,17 +122,116 @@ PROMPT;
         $categoryId = null;
         if (!empty($data['suggested_category'])) {
             $cat = Category::where('type', 'expense')
+                ->where('user_id', auth()->id())
                 ->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($data['suggested_category']) . '%'])
                 ->first();
             $categoryId = $cat?->id;
         }
 
-        return response()->json([
-            'amount'      => (string) intval($data['amount'] ?? 0),
-            'type'        => 'expense',
+        // Save image to storage
+        $imagePath = null;
+        try {
+            $ext       = str_contains($mediaType, 'png') ? 'png' : 'jpg';
+            $imagePath = 'receipts/' . auth()->id() . '/' . Str::uuid() . '.' . $ext;
+            Storage::disk('public')->put($imagePath, base64_decode($imageData));
+        } catch (\Exception) {
+            $imagePath = null;
+        }
+
+        // Save scan record
+        $scan = ReceiptScan::create([
+            'user_id'     => auth()->id(),
+            'category_id' => $categoryId,
+            'image_path'  => $imagePath,
+            'amount'      => intval($data['amount'] ?? 0),
             'description' => $data['description'] ?? '',
             'date'        => $data['date'] ?? $today,
+            'status'      => 'pending',
+        ]);
+
+        return response()->json([
+            'scan_id'     => $scan->id,
+            'amount'      => (string) $scan->amount,
+            'type'        => 'expense',
+            'description' => $scan->description,
+            'date'        => $scan->date->format('Y-m-d'),
             'category_id' => $categoryId ? (string) $categoryId : '',
         ]);
+    }
+
+    public function history(): Response
+    {
+        $scans = ReceiptScan::with(['category', 'transaction'])
+            ->where('user_id', auth()->id())
+            ->latest()
+            ->paginate(20);
+
+        return Inertia::render('Receipts/History', [
+            'scans'      => $scans,
+            'wallets'    => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
+            'categories' => Category::where('user_id', auth()->id())->where('type', 'expense')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function saveToTransaction(Request $request, ReceiptScan $scan): JsonResponse
+    {
+        abort_if($scan->user_id !== auth()->id(), 403);
+
+        if ($scan->status === 'saved') {
+            return response()->json(['error' => 'Struk ini sudah disimpan sebagai transaksi.'], 422);
+        }
+
+        $validated = $request->validate([
+            'wallet_id'   => ['required', 'exists:wallets,id'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'amount'      => 'required|numeric|min:1',
+            'description' => 'nullable|string|max:255',
+            'date'        => 'required|date',
+        ]);
+
+        $transaction = Transaction::create([
+            'user_id'     => auth()->id(),
+            'amount'      => $validated['amount'],
+            'type'        => 'expense',
+            'description' => $validated['description'] ?? $scan->description,
+            'date'        => $validated['date'],
+            'category_id' => $validated['category_id'] ?? $scan->category_id,
+            'wallet_id'   => $validated['wallet_id'],
+        ]);
+
+        // Update wallet balance
+        $wallet = Wallet::find($validated['wallet_id']);
+        $wallet->decrement('balance', $transaction->amount);
+
+        // Mark scan as saved
+        $scan->update([
+            'transaction_id' => $transaction->id,
+            'status'         => 'saved',
+        ]);
+
+        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($validated['date']));
+
+        return response()->json([
+            'success'        => true,
+            'transaction_id' => $transaction->id,
+        ]);
+    }
+
+    public function destroy(ReceiptScan $scan): RedirectResponse
+    {
+        abort_if($scan->user_id !== auth()->id(), 403);
+
+        if ($scan->image_path) {
+            Storage::disk('public')->delete($scan->image_path);
+        }
+
+        $scan->delete();
+
+        return back()->with('success', 'Riwayat scan berhasil dihapus.');
+    }
+
+    private function forgetBudgetAlertCache(int $userId, Carbon $date): void
+    {
+        Cache::forget("budget_alerts_{$userId}_{$date->year}_{$date->month}");
     }
 }

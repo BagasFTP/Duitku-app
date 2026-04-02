@@ -62,12 +62,12 @@ class ChatController extends Controller
         $year  = $now->year;
 
         // Wallets
-        $wallets = Wallet::orderBy('name')->get();
+        $wallets = Wallet::where('user_id', auth()->id())->orderBy('name')->get();
         $totalBalance = $wallets->sum('balance');
         $walletLines  = $wallets->map(fn ($w) => "- {$w->name} ({$w->type}): Rp " . number_format($w->balance, 0, ',', '.'))->join("\n");
 
         // This month income & expense
-        $transactions = Transaction::whereMonth('date', $month)->whereYear('date', $year)->get();
+        $transactions = Transaction::where('user_id', auth()->id())->whereMonth('date', $month)->whereYear('date', $year)->get();
         $income  = $transactions->where('type', 'income')->sum('amount');
         $expense = $transactions->where('type', 'expense')->sum('amount');
 
@@ -81,6 +81,7 @@ class ChatController extends Controller
 
         // Budget status
         $budgets = Budget::with('category')
+            ->where('user_id', auth()->id())
             ->where('period_type', 'monthly')
             ->where('month', $month)
             ->where('year', $year)
@@ -95,6 +96,7 @@ class ChatController extends Controller
 
         // Recent 5 transactions
         $recent = Transaction::with(['category', 'wallet'])
+            ->where('user_id', auth()->id())
             ->whereMonth('date', $month)->whereYear('date', $year)
             ->latest('date')->limit(5)->get()
             ->map(fn ($t) => "- [{$t->date->format('d M')}] {$t->category?->name}: " .

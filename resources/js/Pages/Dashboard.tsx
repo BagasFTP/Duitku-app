@@ -97,7 +97,7 @@ export default function Dashboard({ summary, recentTransactions, expenseByCatego
     // Compute budget alerts from existing props
     const budgetAlerts = budgets
         .map((budget) => {
-            const spent = expenseByCategory.find((e) => e.category.id === budget.category_id);
+            const spent = expenseByCategory.find((e) => e.category?.id === budget.category_id);
             const actual = Number(spent?.total ?? 0);
             const limit = Number(budget.amount);
             const pct = limit > 0 ? (actual / limit) * 100 : 0;

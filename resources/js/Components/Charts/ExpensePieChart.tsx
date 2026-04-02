@@ -8,7 +8,7 @@ interface Category {
 }
 
 interface ExpenseItem {
-    category: Category;
+    category: Category | null;
     total: string | number;
 }
 
@@ -43,9 +43,9 @@ export default function ExpensePieChart({ data }: Props) {
 
     const chartData = [
         ...top.map((item) => ({
-            name: item.category.name,
+            name: item.category?.name ?? 'Tanpa Kategori',
             value: Number(item.total),
-            color: item.category.color || '#6366f1',
+            color: item.category?.color || '#6366f1',
         })),
         ...(restTotal > 0 ? [{ name: 'Lainnya', value: restTotal, color: '#cbd5e1' }] : []),
     ];

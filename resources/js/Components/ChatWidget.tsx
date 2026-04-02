@@ -1,12 +1,73 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { MessageCircle, X, Send, Trash2, Bot, User, Loader2 } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import {
+    MessageCircle, X, Send, Trash2, Bot, User, Loader2,
+    CheckCircle2, ArrowLeftRight, PiggyBank, TrendingUp, TrendingDown,
+} from 'lucide-react';
+
+interface ActionResult {
+    success: boolean;
+    type?: 'transaction' | 'transfer' | 'savings';
+    label?: string;
+    detail?: string;
+    message?: string; // error message
+    data?: Record<string, unknown>;
+}
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    action_result?: ActionResult | string | null;
     created_at?: string;
 }
+
+function ActionCard({ result }: { result: ActionResult }) {
+    if (!result.success) {
+        return (
+            <div className="mt-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
+                {result.message ?? 'Tindakan gagal.'}
+            </div>
+        );
+    }
+
+    const icons: Record<string, React.ReactNode> = {
+        transaction: result.data?.type === 'income'
+            ? <TrendingUp size={13} className="text-emerald-600" />
+            : <TrendingDown size={13} className="text-rose-500" />,
+        transfer: <ArrowLeftRight size={13} className="text-indigo-600" />,
+        savings:  <PiggyBank size={13} className="text-violet-600" />,
+    };
+
+    const colors: Record<string, string> = {
+        transaction: result.data?.type === 'income' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200',
+        transfer:    'bg-indigo-50 border-indigo-200',
+        savings:     'bg-violet-50 border-violet-200',
+    };
+
+    const colorCls = colors[result.type ?? ''] ?? 'bg-slate-50 border-slate-200';
+
+    return (
+        <div className={`mt-2 ${colorCls} border rounded-xl px-3 py-2.5 text-xs`}>
+            <div className="flex items-center gap-1.5 font-semibold text-slate-700 mb-0.5">
+                {icons[result.type ?? '']}
+                <CheckCircle2 size={12} className="text-emerald-500" />
+                {result.label}
+            </div>
+            {result.detail && (
+                <p className="text-slate-500 pl-0.5">{result.detail}</p>
+            )}
+        </div>
+    );
+}
+
+const parseActionResult = (raw: ActionResult | string | null | undefined): ActionResult | null => {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return null; }
+    }
+    return raw;
+};
 
 export default function ChatWidget() {
     const [open, setOpen]         = useState(false);
@@ -17,7 +78,6 @@ export default function ChatWidget() {
     const bottomRef               = useRef<HTMLDivElement>(null);
     const inputRef                = useRef<HTMLInputElement>(null);
 
-    // Load history when first opened
     useEffect(() => {
         if (open && !fetched) {
             axios.get('/chat/history').then((res) => {
@@ -27,12 +87,10 @@ export default function ChatWidget() {
         }
     }, [open]);
 
-    // Scroll to bottom on new messages
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, open]);
 
-    // Focus input when opened
     useEffect(() => {
         if (open) setTimeout(() => inputRef.current?.focus(), 100);
     }, [open]);
@@ -47,7 +105,17 @@ export default function ChatWidget() {
 
         try {
             const res = await axios.post('/chat/send', { message: text });
-            setMessages((prev) => [...prev, { role: 'assistant', content: res.data.reply }]);
+            const newMsg: Message = {
+                role:          'assistant',
+                content:       res.data.reply,
+                action_result: res.data.action_result ?? null,
+            };
+            setMessages((prev) => [...prev, newMsg]);
+
+            // Reload halaman jika ada tindakan berhasil, agar data di UI terbaru
+            if (res.data.action_result?.success) {
+                setTimeout(() => router.reload({ only: ['wallets', 'summary', 'recentTransactions', 'expenseByCategory', 'budgets', 'savingsGoals'] }), 600);
+            }
         } catch {
             setMessages((prev) => [...prev, { role: 'assistant', content: 'Maaf, terjadi kesalahan. Coba lagi.' }]);
         } finally {
@@ -64,6 +132,12 @@ export default function ChatWidget() {
     const handleKey = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     };
+
+    const quickPrompts = [
+        'Catat pengeluaran makan 50rb dari dompet BCA',
+        'Transfer 200rb dari BCA ke dompet tunai',
+        'Bulan ini saya boros di mana?',
+    ];
 
     return (
         <>
@@ -83,18 +157,20 @@ export default function ChatWidget() {
             </button>
 
             {/* Chat panel */}
-            <div className={`fixed bottom-24 right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col transition-all duration-300 origin-bottom-right ${
-                open ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
-            }`} style={{ height: '520px' }}>
-
+            <div
+                className={`fixed bottom-24 right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col transition-all duration-300 origin-bottom-right ${
+                    open ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
+                }`}
+                style={{ height: '520px' }}
+            >
                 {/* Header */}
-                <div className="flex items-center gap-3 px-4 py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl">
+                <div className="flex items-center gap-3 px-4 py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl shrink-0">
                     <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
                         <Bot size={16} className="text-white" />
                     </div>
                     <div className="flex-1">
                         <p className="text-sm font-bold text-white">Asisten Keuangan</p>
-                        <p className="text-xs text-violet-200">Tanya apa saja soal keuanganmu</p>
+                        <p className="text-xs text-violet-200">Bisa tanya & catat transaksi</p>
                     </div>
                     <button
                         onClick={handleClear}
@@ -114,13 +190,9 @@ export default function ChatWidget() {
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-slate-600">Halo! Ada yang bisa saya bantu?</p>
-                                <p className="text-xs mt-1">Coba tanya:</p>
+                                <p className="text-xs mt-1">Coba:</p>
                                 <div className="flex flex-col gap-1.5 mt-2">
-                                    {[
-                                        'Bulan ini saya boros di mana?',
-                                        'Berapa sisa anggaran makan saya?',
-                                        'Kasih tips hemat bulan ini',
-                                    ].map((q) => (
+                                    {quickPrompts.map((q) => (
                                         <button
                                             key={q}
                                             onClick={() => { setInput(q); inputRef.current?.focus(); }}
@@ -134,28 +206,36 @@ export default function ChatWidget() {
                         </div>
                     )}
 
-                    {messages.map((msg, i) => (
-                        <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                            {/* Avatar */}
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                                msg.role === 'assistant' ? 'bg-violet-100' : 'bg-indigo-100'
-                            }`}>
-                                {msg.role === 'assistant'
-                                    ? <Bot size={12} className="text-violet-600" />
-                                    : <User size={12} className="text-indigo-600" />
-                                }
-                            </div>
+                    {messages.map((msg, i) => {
+                        const action = parseActionResult(msg.action_result);
+                        return (
+                            <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                {/* Avatar */}
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                                    msg.role === 'assistant' ? 'bg-violet-100' : 'bg-indigo-100'
+                                }`}>
+                                    {msg.role === 'assistant'
+                                        ? <Bot size={12} className="text-violet-600" />
+                                        : <User size={12} className="text-indigo-600" />
+                                    }
+                                </div>
 
-                            {/* Bubble */}
-                            <div className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                                msg.role === 'user'
-                                    ? 'bg-indigo-600 text-white rounded-br-sm'
-                                    : 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                            }`}>
-                                {msg.content}
+                                {/* Bubble + action card */}
+                                <div className={`max-w-[78%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+                                    <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                                        msg.role === 'user'
+                                            ? 'bg-indigo-600 text-white rounded-br-sm'
+                                            : 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                                    }`}>
+                                        {msg.content}
+                                    </div>
+                                    {action && msg.role === 'assistant' && (
+                                        <ActionCard result={action} />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Loading bubble */}
                     {loading && (
@@ -173,7 +253,7 @@ export default function ChatWidget() {
                 </div>
 
                 {/* Input */}
-                <div className="p-3 border-t border-slate-100">
+                <div className="p-3 border-t border-slate-100 shrink-0">
                     <div className="flex items-center gap-2 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                         <input
                             ref={inputRef}
@@ -181,7 +261,7 @@ export default function ChatWidget() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKey}
-                            placeholder="Ketik pesan..."
+                            placeholder="Ketik pesan atau perintah..."
                             className="flex-1 text-sm bg-transparent outline-none text-slate-800 placeholder-slate-400"
                         />
                         <button

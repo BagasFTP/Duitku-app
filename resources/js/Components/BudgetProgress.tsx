@@ -17,7 +17,7 @@ interface Budget {
 }
 
 interface ExpenseByCategory {
-    category: Category;
+    category: Category | null;
     total: string | number;
 }
 
@@ -41,7 +41,7 @@ export default function BudgetProgress({ budgets, expenseByCategory }: Props) {
     return (
         <div className="space-y-4">
             {budgets.map((budget) => {
-                const spent = expenseByCategory.find((e) => e.category.id === budget.category_id);
+                const spent = expenseByCategory.find((e) => e.category?.id === budget.category_id);
                 const actual = Number(spent?.total ?? 0);
                 const limit = Number(budget.amount);
                 const percent = limit > 0 ? Math.min((actual / limit) * 100, 100) : 0;

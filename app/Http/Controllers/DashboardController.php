@@ -30,6 +30,7 @@ class DashboardController extends Controller
 
         $expenseByCategory = $transactions
             ->where('type', 'expense')
+            ->filter(fn($t) => $t->category_id !== null)
             ->groupBy('category_id')
             ->map(fn($group) => [
                 'category' => $group->first()->category,

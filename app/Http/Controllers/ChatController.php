@@ -8,18 +8,20 @@ use App\Models\ChatMessage;
 use App\Models\SavingsGoal;
 use App\Models\Transaction;
 use App\Models\Wallet;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 class ChatController extends Controller
 {
+    // ─── Public endpoints ──────────────────────────────────────────────────
+
     public function history(): JsonResponse
     {
         $messages = ChatMessage::where('user_id', auth()->id())
             ->orderBy('created_at')
-            ->get(['role', 'content', 'created_at']);
+            ->get(['role', 'content', 'action_result', 'created_at']);
 
         return response()->json($messages);
     }
@@ -31,23 +33,27 @@ class ChatController extends Controller
         $userId  = auth()->id();
         $content = trim($request->message);
 
-        // Save user message
         ChatMessage::create(['user_id' => $userId, 'role' => 'user', 'content' => $content]);
 
-        // Build conversation history (last 10 messages)
         $history = ChatMessage::where('user_id', $userId)
             ->orderBy('created_at')
             ->get(['role', 'content'])
-            ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
+            ->map(fn($m) => ['role' => $m->role, 'content' => $m->content])
             ->toArray();
 
-        // Call AI
-        $reply = $this->callAi($history, $this->buildContext());
+        [$reply, $actionResult] = $this->callAiWithTools($history, $this->buildContext($userId));
 
-        // Save assistant reply
-        ChatMessage::create(['user_id' => $userId, 'role' => 'assistant', 'content' => $reply]);
+        ChatMessage::create([
+            'user_id'       => $userId,
+            'role'          => 'assistant',
+            'content'       => $reply,
+            'action_result' => $actionResult ? json_encode($actionResult) : null,
+        ]);
 
-        return response()->json(['reply' => $reply]);
+        return response()->json([
+            'reply'         => $reply,
+            'action_result' => $actionResult,
+        ]);
     }
 
     public function clear(): JsonResponse
@@ -56,23 +62,21 @@ class ChatController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    private function buildContext(): string
+    // ─── Context builder ───────────────────────────────────────────────────
+
+    private function buildContext(int $userId): string
     {
         $now   = Carbon::now();
         $month = $now->month;
         $year  = $now->year;
 
-        // Wallets
-        $wallets = Wallet::where('user_id', auth()->id())->orderBy('name')->get();
+        $wallets      = Wallet::where('user_id', $userId)->orderBy('name')->get();
         $totalBalance = $wallets->sum('balance');
-        $walletLines  = $wallets->map(fn ($w) => "- {$w->name} ({$w->type}): Rp " . number_format($w->balance, 0, ',', '.'))->join("\n");
+        $walletLines  = $wallets->map(fn($w) => "- {$w->name} (ID:{$w->id}, {$w->type}): Rp " . number_format((float)$w->balance, 0, ',', '.'))->join("\n");
 
-        // This month income & expense
-        $transactions = Transaction::where('user_id', auth()->id())->whereMonth('date', $month)->whereYear('date', $year)->get();
-        $income  = $transactions->where('type', 'income')->sum('amount');
-        $expense = $transactions->where('type', 'expense')->sum('amount');
-
-        // Expense by category
+        $transactions      = Transaction::where('user_id', $userId)->whereMonth('date', $month)->whereYear('date', $year)->get();
+        $income            = $transactions->where('type', 'income')->sum('amount');
+        $expense           = $transactions->where('type', 'expense')->sum('amount');
         $expenseByCategory = $transactions->where('type', 'expense')
             ->groupBy('category_id')
             ->map(function ($group) {
@@ -80,36 +84,22 @@ class ChatController extends Controller
                 return '- ' . ($cat?->name ?? 'Lainnya') . ': Rp ' . number_format($group->sum('amount'), 0, ',', '.');
             })->join("\n");
 
-        // Budget status
-        $budgets = Budget::with('category')
-            ->where('user_id', auth()->id())
-            ->where('period_type', 'monthly')
-            ->where('month', $month)
-            ->where('year', $year)
-            ->get();
+        $budgets     = Budget::with('category')->where('user_id', $userId)->where('period_type', 'monthly')->where('month', $month)->where('year', $year)->get();
         $budgetLines = $budgets->map(function ($b) use ($transactions) {
-            $actual = $transactions->where('type', 'expense')
-                ->where('category_id', $b->category_id)->sum('amount');
-            $pct = $b->amount > 0 ? round(($actual / $b->amount) * 100) : 0;
-            return "- {$b->category->name}: anggaran Rp " . number_format($b->amount, 0, ',', '.') .
-                   ", terpakai Rp " . number_format($actual, 0, ',', '.') . " ({$pct}%)";
+            $actual = $transactions->where('type', 'expense')->where('category_id', $b->category_id)->sum('amount');
+            $pct    = $b->amount > 0 ? round(($actual / $b->amount) * 100) : 0;
+            return "- {$b->category->name}: anggaran Rp " . number_format((float)$b->amount, 0, ',', '.') .
+                   ", terpakai Rp " . number_format((float)$actual, 0, ',', '.') . " ({$pct}%)";
         })->join("\n");
 
-        // Recent 5 transactions
         $recent = Transaction::with(['category', 'wallet'])
-            ->where('user_id', auth()->id())
-            ->whereMonth('date', $month)->whereYear('date', $year)
+            ->where('user_id', $userId)->whereMonth('date', $month)->whereYear('date', $year)
             ->latest('date')->limit(5)->get()
-            ->map(fn ($t) => "- [{$t->date->format('d M')}] {$t->category?->name}: " .
-                ($t->type === 'income' ? '+' : '-') . 'Rp ' . number_format($t->amount, 0, ',', '.'))
+            ->map(fn($t) => "- [{$t->date->format('d M')}] {$t->category?->name}: " .
+                ($t->type === 'income' ? '+' : '-') . 'Rp ' . number_format((float)$t->amount, 0, ',', '.'))
             ->join("\n");
 
-        // Savings goals
-        $savingsGoals = SavingsGoal::where('user_id', auth()->id())
-            ->orderBy('is_completed')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
+        $savingsGoals = SavingsGoal::where('user_id', $userId)->orderBy('is_completed')->orderByDesc('created_at')->get();
         $savingsLines = $savingsGoals->isEmpty()
             ? '- Belum ada target tabungan.'
             : $savingsGoals->map(function ($g) {
@@ -117,12 +107,13 @@ class ChatController extends Controller
                 $target   = (float) $g->target_amount;
                 $pct      = $target > 0 ? round(($current / $target) * 100) : 0;
                 $status   = $g->is_completed ? 'Selesai' : "Progres {$pct}%";
-                $deadline = $g->deadline ? ', deadline: ' . $g->deadline->format('d M Y') : '';
-                $name     = (string) $g->name;
-                return "- {$name}: Rp " . number_format($current, 0, ',', '.') .
-                       " / Rp " . number_format($target, 0, ',', '.') .
-                       " ({$status}{$deadline})";
+                $deadline = $g->deadline ? ', deadline: ' . Carbon::parse($g->deadline)->format('d M Y') : '';
+                return "- {$g->name} (ID:{$g->id}): Rp " . number_format($current, 0, ',', '.') .
+                       " / Rp " . number_format($target, 0, ',', '.') . " ({$status}{$deadline})";
             })->join("\n");
+
+        $categories     = Category::where('user_id', $userId)->orderBy('name')->get();
+        $categoryLines  = $categories->map(fn($c) => "- {$c->name} (ID:{$c->id}, tipe:{$c->type})")->join("\n");
 
         $monthName = $now->translatedFormat('F Y');
 
@@ -132,10 +123,13 @@ Data keuangan user bulan {$monthName}:
 DOMPET (Total: Rp {$this->fmt($totalBalance)}):
 {$walletLines}
 
+KATEGORI TERSEDIA:
+{$categoryLines}
+
 RINGKASAN BULAN INI:
-- Pemasukan : Rp {$this->fmt($income)}
-- Pengeluaran: Rp {$this->fmt($expense)}
-- Sisa       : Rp {$this->fmt($income - $expense)}
+- Pemasukan : Rp {$this->fmt((float)$income)}
+- Pengeluaran: Rp {$this->fmt((float)$expense)}
+- Sisa       : Rp {$this->fmt((float)($income - $expense))}
 
 PENGELUARAN PER KATEGORI:
 {$expenseByCategory}
@@ -151,29 +145,313 @@ TARGET TABUNGAN:
 CONTEXT;
     }
 
-    private function callAi(array $history, string $context): string
+    // ─── Tool definitions ──────────────────────────────────────────────────
+
+    private function getTools(): array
     {
+        return [
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'create_transaction',
+                    'description' => 'Mencatat SATU sisi transaksi: pemasukan (income) atau pengeluaran (expense) pada satu dompet. JANGAN gunakan tool ini jika user menyebut dua dompet sekaligus atau minta pindah/transfer uang antar dompet — gunakan transfer_between_wallets untuk itu.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'amount'      => ['type' => 'number', 'description' => 'Jumlah uang dalam Rupiah (angka saja, tanpa titik/koma)'],
+                            'type'        => ['type' => 'string', 'enum' => ['income', 'expense'], 'description' => '"income" untuk pemasukan ke dompet, "expense" untuk pengeluaran dari dompet'],
+                            'wallet_id'   => ['type' => 'integer', 'description' => 'ID dompet (lihat daftar dompet di context)'],
+                            'category_id' => ['type' => 'integer', 'description' => 'ID kategori yang sesuai (lihat daftar kategori di context). Opsional — kosongkan jika tidak ada kategori yang cocok.'],
+                            'description' => ['type' => 'string', 'description' => 'Keterangan singkat transaksi (opsional)'],
+                            'date'        => ['type' => 'string', 'description' => 'Tanggal transaksi format YYYY-MM-DD. Default hari ini jika tidak disebutkan.'],
+                        ],
+                        'required'   => ['amount', 'type', 'wallet_id'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'transfer_between_wallets',
+                    'description' => 'Pindahkan/transfer uang dari satu dompet ke dompet lain. Gunakan ini setiap kali user menyebut dua dompet sekaligus, atau menggunakan kata: pindah, transfer, kirim, dari X ke Y.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'amount'          => ['type' => 'number', 'description' => 'Jumlah uang yang ditransfer dalam Rupiah'],
+                            'from_wallet_id'  => ['type' => 'integer', 'description' => 'ID dompet asal'],
+                            'to_wallet_id'    => ['type' => 'integer', 'description' => 'ID dompet tujuan'],
+                            'description'     => ['type' => 'string', 'description' => 'Keterangan transfer (opsional)'],
+                        ],
+                        'required'   => ['amount', 'from_wallet_id', 'to_wallet_id'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'contribute_to_savings',
+                    'description' => 'Menambah uang ke target tabungan. Bisa sekaligus mengurangi saldo dompet.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'savings_goal_id' => ['type' => 'integer', 'description' => 'ID target tabungan (lihat daftar target tabungan di context)'],
+                            'amount'          => ['type' => 'number', 'description' => 'Jumlah uang yang ditabung dalam Rupiah'],
+                            'wallet_id'       => ['type' => 'integer', 'description' => 'ID dompet yang saldonya akan dikurangi (opsional)'],
+                            'note'            => ['type' => 'string', 'description' => 'Catatan (opsional)'],
+                        ],
+                        'required'   => ['savings_goal_id', 'amount'],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    // ─── Tool executor ─────────────────────────────────────────────────────
+
+    private function executeTool(string $name, array $args, int $userId): array
+    {
+        try {
+            return match ($name) {
+                'create_transaction'      => $this->toolCreateTransaction($args, $userId),
+                'transfer_between_wallets' => $this->toolTransfer($args, $userId),
+                'contribute_to_savings'   => $this->toolContribute($args, $userId),
+                default                   => ['success' => false, 'message' => "Tool '{$name}' tidak dikenal."],
+            };
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => 'Gagal: ' . $e->getMessage()];
+        }
+    }
+
+    private function toolCreateTransaction(array $args, int $userId): array
+    {
+        $wallet = Wallet::where('id', $args['wallet_id'])->where('user_id', $userId)->firstOrFail();
+
+        $catId = null;
+        $catName = 'Tanpa kategori';
+        if (!empty($args['category_id'])) {
+            $cat = Category::where('id', $args['category_id'])->where('user_id', $userId)->first();
+            if ($cat) {
+                $catId   = $cat->id;
+                $catName = (string) $cat->name;
+            }
+        }
+
+        $amount = (float) $args['amount'];
+        $type   = $args['type'];
+        $date   = $args['date'] ?? Carbon::today()->toDateString();
+
+        $trx = Transaction::create([
+            'user_id'     => $userId,
+            'amount'      => $amount,
+            'type'        => $type,
+            'description' => $args['description'] ?? null,
+            'date'        => $date,
+            'category_id' => $catId,
+            'wallet_id'   => $wallet->id,
+        ]);
+
+        if ($type === 'income') {
+            $wallet->increment('balance', $amount);
+        } else {
+            $wallet->decrement('balance', $amount);
+        }
+
+        $label      = $type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+        $walletName = (string) $wallet->name;
+        return [
+            'success'  => true,
+            'type'     => 'transaction',
+            'label'    => "{$label} berhasil dicatat",
+            'detail'   => "Rp " . number_format($amount, 0, ',', '.') . " · {$catName} · {$walletName}",
+            'data'     => ['transaction_id' => $trx->id, 'wallet' => $walletName, 'category' => $catName, 'amount' => $amount, 'type' => $type],
+        ];
+    }
+
+    private function toolTransfer(array $args, int $userId): array
+    {
+        $from   = Wallet::where('id', $args['from_wallet_id'])->where('user_id', $userId)->firstOrFail();
+        $to     = Wallet::where('id', $args['to_wallet_id'])->where('user_id', $userId)->firstOrFail();
+        $amount = (float) $args['amount'];
+
+        if ((float) $from->balance < $amount) {
+            return ['success' => false, 'message' => "Saldo {$from->name} tidak mencukupi (Rp " . number_format((float)$from->balance, 0, ',', '.') . ")."];
+        }
+
+        $fromName = (string) $from->name;
+        $toName   = (string) $to->name;
+        $desc     = $args['description'] ?? "Transfer ke {$toName}";
+        $date     = Carbon::today()->toDateString();
+
+        // Debit from source — adjustment agar tidak masuk pengeluaran
+        Transaction::create([
+            'user_id'     => $userId,
+            'amount'      => $amount,
+            'type'        => 'adjustment',
+            'description' => $desc,
+            'date'        => $date,
+            'category_id' => null,
+            'wallet_id'   => $from->id,
+        ]);
+        $from->decrement('balance', $amount);
+
+        // Credit to destination — adjustment agar tidak masuk pemasukan
+        Transaction::create([
+            'user_id'     => $userId,
+            'amount'      => $amount,
+            'type'        => 'adjustment',
+            'description' => "Transfer dari {$fromName}",
+            'date'        => $date,
+            'category_id' => null,
+            'wallet_id'   => $to->id,
+        ]);
+        $to->increment('balance', $amount);
+
+        return [
+            'success' => true,
+            'type'    => 'transfer',
+            'label'   => 'Transfer berhasil',
+            'detail'  => "Rp " . number_format($amount, 0, ',', '.') . " dari {$fromName} → {$toName}",
+            'data'    => ['from' => $fromName, 'to' => $toName, 'amount' => $amount],
+        ];
+    }
+
+    private function toolContribute(array $args, int $userId): array
+    {
+        $goal   = SavingsGoal::where('id', $args['savings_goal_id'])->where('user_id', $userId)->firstOrFail();
+        $amount = (float) $args['amount'];
+
+        if (!empty($args['wallet_id'])) {
+            $wallet = Wallet::where('id', $args['wallet_id'])->where('user_id', $userId)->firstOrFail();
+
+            if ((float) $wallet->balance < $amount) {
+                return ['success' => false, 'message' => "Saldo {$wallet->name} tidak mencukupi."];
+            }
+
+            $wallet->decrement('balance', $amount);
+            Transaction::create([
+                'user_id'     => $userId,
+                'amount'      => $amount,
+                'type'        => 'adjustment',
+                'description' => 'Tabungan: ' . $goal->name . (isset($args['note']) ? ' — ' . $args['note'] : ''),
+                'date'        => Carbon::today()->toDateString(),
+                'category_id' => null,
+                'wallet_id'   => $wallet->id,
+            ]);
+        }
+
+        $newAmount = (float) $goal->current_amount + $amount;
+        $completed = $newAmount >= (float) $goal->target_amount;
+        $goal->update(['current_amount' => $newAmount, 'is_completed' => $completed]);
+
+        $label = $completed ? "Target \"{$goal->name}\" tercapai! 🎉" : 'Tabungan berhasil ditambahkan';
+        return [
+            'success' => true,
+            'type'    => 'savings',
+            'label'   => $label,
+            'detail'  => "Rp " . number_format($amount, 0, ',', '.') . " → {$goal->name}",
+            'data'    => ['goal' => $goal->name, 'amount' => $amount, 'new_total' => $newAmount, 'completed' => $completed],
+        ];
+    }
+
+    // ─── AI call with tool use ─────────────────────────────────────────────
+
+    /** @return array{0: string, 1: array|null} [reply, actionResult] */
+    private function callAiWithTools(array $history, string $context): array
+    {
+        $userId = auth()->id();
+
         $systemPrompt = <<<SYSTEM
-Kamu adalah asisten keuangan pribadi yang ramah dan helpful. Kamu memiliki akses ke data keuangan user berikut:
+Kamu adalah asisten keuangan pribadi yang bisa membaca DAN mengubah data keuangan user.
 
 {$context}
 
-Jawab pertanyaan user dalam Bahasa Indonesia. Berikan jawaban yang singkat, jelas, dan actionable. Gunakan data di atas untuk memberikan insight yang spesifik dan personal. Jika user bertanya di luar topik keuangan, arahkan kembali ke topik keuangan dengan sopan.
+Kemampuan kamu:
+1. Menjawab pertanyaan tentang keuangan
+2. Mencatat satu transaksi → create_transaction
+3. Pindahkan uang antar dompet → transfer_between_wallets
+4. Menabung → contribute_to_savings
+
+ATURAN PEMILIHAN TOOL:
+- User sebut DUA dompet ("dari X ke Y", "pindah dari X ke Y", "transfer ke Y dari X") → WAJIB pakai transfer_between_wallets, JANGAN pakai create_transaction
+- User hanya sebut SATU dompet untuk catat pengeluaran/pemasukan → pakai create_transaction
+- Kata kunci transfer: pindah, kirim, transfer, dari [dompet A] ke [dompet B]
+- JANGAN pernah catat hanya satu sisi ketika user bermaksud memindahkan uang antar dompet
+
+ATURAN UMUM:
+- Jika ada ambiguitas nama dompet atau jumlah tidak jelas, tanya dulu sebelum eksekusi
+- Jangan mengarang saldo dompet setelah transaksi — cukup konfirmasi tindakan yang dilakukan
+- Jawab Bahasa Indonesia, singkat dan ramah
 SYSTEM;
+
+        $messages = array_merge(
+            [['role' => 'system', 'content' => $systemPrompt]],
+            array_slice($history, -10)
+        );
 
         $response = Http::timeout(30)->withHeaders([
             'Authorization' => 'Bearer ' . config('services.groq.key'),
             'Content-Type'  => 'application/json',
         ])->post('https://api.groq.com/openai/v1/chat/completions', [
-            'model'       => 'llama-3.1-8b-instant',
-            'temperature' => 0.7,
-            'messages'    => array_merge(
-                [['role' => 'system', 'content' => $systemPrompt]],
-                array_slice($history, -10) // last 10 messages for context
-            ),
+            'model'       => 'llama-3.3-70b-versatile',
+            'temperature' => 0.4,
+            'messages'    => $messages,
+            'tools'       => $this->getTools(),
+            'tool_choice' => 'auto',
         ]);
 
-        return $response->json('choices.0.message.content', 'Maaf, terjadi kesalahan. Coba lagi.');
+        if (!$response->successful()) {
+            return ['Maaf, terjadi kesalahan koneksi ke AI. Coba lagi.', null];
+        }
+
+        $choice = $response->json('choices.0');
+
+        // ── Tool call requested by AI ──
+        if (($choice['finish_reason'] ?? '') === 'tool_calls') {
+            $toolCalls    = $choice['message']['tool_calls'] ?? [];
+            $actionResult = null;
+            $toolResults  = [];
+
+            foreach ($toolCalls as $call) {
+                $name = $call['function']['name'];
+                $args = json_decode($call['function']['arguments'] ?? '{}', true) ?? [];
+                $result = $this->executeTool($name, $args, $userId);
+
+                if ($result['success'] && !$actionResult) {
+                    $actionResult = $result;
+                }
+
+                $toolResults[] = [
+                    'role'         => 'tool',
+                    'tool_call_id' => $call['id'],
+                    'content'      => json_encode($result),
+                ];
+            }
+
+            // Send tool results back to AI for natural language reply
+            $followUp = Http::timeout(30)->withHeaders([
+                'Authorization' => 'Bearer ' . config('services.groq.key'),
+                'Content-Type'  => 'application/json',
+            ])->post('https://api.groq.com/openai/v1/chat/completions', [
+                'model'       => 'llama-3.3-70b-versatile',
+                'temperature' => 0.4,
+                'messages'    => array_merge($messages, [$choice['message']], $toolResults),
+            ]);
+
+            // Fallback jika follow-up call gagal
+            if (!$followUp->successful()) {
+                $reply = $actionResult
+                    ? ($actionResult['label'] . ': ' . $actionResult['detail'])
+                    : 'Tindakan dijalankan, tapi gagal mendapat konfirmasi dari AI.';
+                return [$reply, $actionResult];
+            }
+
+            $reply = $followUp->json('choices.0.message.content', 'Selesai.');
+            return [$reply, $actionResult];
+        }
+
+        // ── Regular text reply ──
+        $reply = $choice['message']['content'] ?? 'Maaf, tidak ada respons dari AI.';
+        return [$reply, null];
     }
 
     private function fmt(float $amount): string

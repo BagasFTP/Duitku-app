@@ -5,7 +5,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { type PageProps } from '@/types';
 import {
     Plus, Pencil, Trash2, X, Target, CheckCircle2,
-    CalendarDays, Wallet, AlertTriangle, Trophy,
+    CalendarDays, Wallet, AlertTriangle, Trophy, PiggyBank,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -131,8 +131,11 @@ export default function SavingsGoalsIndex({ goals, wallets }: Props) {
         router.delete('/savings/' + g.id, { preserveScroll: true });
     };
 
-    const active    = goals.filter((g) => !g.is_completed);
-    const completed = goals.filter((g) => g.is_completed);
+    const active       = goals.filter((g) => !g.is_completed);
+    const completed    = goals.filter((g) => g.is_completed);
+    const totalCurrent = goals.reduce((s, g) => s + Number(g.current_amount), 0);
+    const totalTarget  = goals.reduce((s, g) => s + Number(g.target_amount), 0);
+    const totalPct     = totalTarget > 0 ? Math.min(Math.round((totalCurrent / totalTarget) * 100), 100) : 0;
 
     return (
         <AppLayout>
@@ -165,85 +168,138 @@ export default function SavingsGoalsIndex({ goals, wallets }: Props) {
                     </div>
                 )}
 
+                {/* Summary banner */}
+                {goals.length > 0 && (
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 p-5 text-white shadow-lg shadow-indigo-200">
+                        <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/10 pointer-events-none" />
+                        <div className="absolute -bottom-8 -left-4 w-24 h-24 rounded-full bg-black/10 pointer-events-none" />
+                        <div className="relative">
+                            <div className="flex items-end justify-between mb-3">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <PiggyBank size={15} className="text-indigo-300" />
+                                        <p className="text-xs font-medium text-indigo-200">Total Terkumpul</p>
+                                    </div>
+                                    <p className="text-3xl font-bold tracking-tight">{fmt(totalCurrent)}</p>
+                                    <p className="text-xs text-indigo-300 mt-0.5">dari {fmt(totalTarget)} total target</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`text-3xl font-bold ${totalPct >= 100 ? 'text-emerald-300' : totalPct >= 80 ? 'text-amber-300' : 'text-white'}`}>
+                                        {totalPct}%
+                                    </p>
+                                    <p className="text-xs text-indigo-300">{active.length} aktif · {completed.length} tercapai</p>
+                                </div>
+                            </div>
+                            <div className="h-2.5 w-full bg-white/20 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-all duration-700"
+                                    style={{ width: totalPct + '%', backgroundColor: totalPct >= 100 ? '#6ee7b7' : '#a5b4fc' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Empty state */}
                 {goals.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <div className="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center mb-4">
-                            <Target size={28} className="text-indigo-500" />
+                        <div className="relative mb-5">
+                            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+                                <Target size={36} className="text-white" />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center shadow-md">
+                                <Plus size={14} className="text-white" />
+                            </div>
                         </div>
-                        <p className="font-semibold text-slate-600">Belum ada target tabungan</p>
-                        <p className="text-sm text-slate-400 mt-1 mb-5">Mulai buat target pertamamu!</p>
+                        <p className="font-bold text-slate-700 text-lg">Belum ada target tabungan</p>
+                        <p className="text-sm text-slate-400 mt-1 mb-6 max-w-xs">Tetapkan tujuan keuanganmu dan pantau progressnya setiap hari</p>
                         <button
                             onClick={openCreate}
-                            className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-indigo-200"
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
                         >
-                            <Plus size={15} /> Buat Target
+                            <Plus size={15} /> Buat Target Pertama
                         </button>
                     </div>
                 )}
 
                 {/* Active goals */}
                 {active.length > 0 && (
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {active.map((g) => {
-                            const current = Number(g.current_amount);
-                            const target  = Number(g.target_amount);
-                            const pct     = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+                            const current   = Number(g.current_amount);
+                            const target    = Number(g.target_amount);
+                            const pct       = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
                             const remaining = target - current;
-                            const isNear  = pct >= 80;
-                            const color   = g.color;
+                            const color     = g.color;
 
                             return (
-                                <div key={g.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 hover:shadow-md transition-shadow">
-                                    <div className="flex items-start gap-4">
-                                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: color + '20' }}>
-                                            <DynamicIcon name={g.icon} size={22} style={{ color }} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-start justify-between gap-2">
+                                <div
+                                    key={g.id}
+                                    className="group relative overflow-hidden rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                                    style={{ background: `linear-gradient(135deg, ${color}dd 0%, ${color} 100%)` }}
+                                >
+                                    {/* Decorative circles */}
+                                    <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-white/10 pointer-events-none" />
+                                    <div className="absolute -bottom-8 -left-4 w-24 h-24 rounded-full bg-black/10 pointer-events-none" />
+                                    <div className="absolute top-10 -right-2 w-14 h-14 rounded-full bg-white/5 pointer-events-none" />
+
+                                    <div className="relative p-5">
+                                        {/* Top row */}
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-sm shrink-0">
+                                                    <DynamicIcon name={g.icon} size={20} color="white" />
+                                                </div>
                                                 <div>
-                                                    <p className="font-bold text-slate-800">{g.name}</p>
+                                                    <p className="font-bold text-white text-base leading-tight">{g.name}</p>
                                                     {g.deadline && (
-                                                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                                                            <CalendarDays size={11} />
-                                                            Target: {new Date(g.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        <p className="text-xs text-white/70 flex items-center gap-1 mt-0.5">
+                                                            <CalendarDays size={10} />
+                                                            {new Date(g.deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                         </p>
                                                     )}
                                                 </div>
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                    <button onClick={() => openContrib(g)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Tambah tabungan">
-                                                        <Plus size={15} />
-                                                    </button>
-                                                    <button onClick={() => openEdit(g)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                                                        <Pencil size={14} />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(g)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
                                             </div>
-
-                                            {/* Progress */}
-                                            <div className="mt-3">
-                                                <div className="flex items-center justify-between mb-1.5">
-                                                    <span className="text-xs text-slate-500">
-                                                        <span className="font-bold text-slate-800">{fmtShort(current)}</span> dari {fmtShort(target)}
-                                                    </span>
-                                                    <span className={`text-xs font-bold ${isNear ? 'text-emerald-600' : 'text-indigo-600'}`}>{pct}%</span>
-                                                </div>
-                                                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full rounded-full transition-all duration-700"
-                                                        style={{ width: pct + '%', backgroundColor: isNear ? '#22c55e' : color }}
-                                                    />
-                                                </div>
-                                                <p className="text-xs text-slate-400 mt-1.5">Sisa: <span className="font-semibold text-slate-600">{fmtShort(remaining)}</span></p>
+                                            {/* Action buttons — appear on hover */}
+                                            <div className="hidden group-hover:flex items-center gap-0.5">
+                                                <button onClick={() => openEdit(g)} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors">
+                                                    <Pencil size={13} />
+                                                </button>
+                                                <button onClick={() => handleDelete(g)} className="p-1.5 rounded-lg bg-white/20 hover:bg-red-500/60 text-white transition-colors">
+                                                    <Trash2 size={13} />
+                                                </button>
                                             </div>
-
-                                            {g.notes && (
-                                                <p className="text-xs text-slate-400 mt-2 italic">"{g.notes}"</p>
-                                            )}
                                         </div>
+
+                                        {/* Amount */}
+                                        <p className="text-2xl font-bold text-white tracking-tight">{fmtShort(current)}</p>
+                                        <p className="text-xs text-white/70 mt-0.5">dari {fmt(target)}</p>
+
+                                        {/* Progress bar */}
+                                        <div className="mt-4 mb-1">
+                                            <div className="h-2 w-full bg-white/25 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full bg-white transition-all duration-700"
+                                                    style={{ width: pct + '%' }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="text-xs text-white/70">
+                                                Sisa: <span className="font-semibold text-white">{fmtShort(remaining)}</span>
+                                            </p>
+                                            <span className="text-sm font-bold text-white">{pct}%</span>
+                                        </div>
+
+                                        {/* Contribute button */}
+                                        <button
+                                            onClick={() => openContrib(g)}
+                                            className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors border border-white/20"
+                                        >
+                                            <Plus size={13} /> Tambah Tabungan
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -258,19 +314,25 @@ export default function SavingsGoalsIndex({ goals, wallets }: Props) {
                             <Trophy size={15} className="text-amber-500" />
                             <p className="text-sm font-bold text-slate-600">Tercapai ({completed.length})</p>
                         </div>
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {completed.map((g) => (
-                                <div key={g.id} className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center gap-3">
+                                <div
+                                    key={g.id}
+                                    className="relative overflow-hidden rounded-2xl p-4 flex items-center gap-3"
+                                    style={{ background: `linear-gradient(135deg, ${g.color}22 0%, ${g.color}15 100%)`, border: `1px solid ${g.color}30` }}
+                                >
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: g.color + '20' }}>
                                         <DynamicIcon name={g.icon} size={18} style={{ color: g.color }} />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-bold text-slate-700">{g.name}</p>
-                                        <p className="text-xs text-emerald-600 font-medium">{fmt(Number(g.target_amount))} — Tercapai!</p>
+                                        <p className="text-xs text-emerald-600 font-semibold">{fmt(Number(g.target_amount))} ✓</p>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                        <CheckCircle2 size={18} className="text-emerald-500" />
-                                        <button onClick={() => handleDelete(g)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center">
+                                            <CheckCircle2 size={15} className="text-emerald-500" />
+                                        </div>
+                                        <button onClick={() => handleDelete(g)} className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                                             <Trash2 size={13} />
                                         </button>
                                     </div>

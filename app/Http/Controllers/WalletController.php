@@ -41,6 +41,8 @@ class WalletController extends Controller
 
     public function edit(Wallet $wallet): Response
     {
+        abort_if($wallet->user_id !== auth()->id(), 403);
+
         return Inertia::render('Wallets/Edit', [
             'wallet' => $wallet,
         ]);
@@ -48,6 +50,8 @@ class WalletController extends Controller
 
     public function update(Request $request, Wallet $wallet): RedirectResponse
     {
+        abort_if($wallet->user_id !== auth()->id(), 403);
+
         $validated = $request->validate([
             'name'  => 'required|string|max:100',
             'type'  => 'required|in:bank,cash,ewallet',
@@ -62,6 +66,7 @@ class WalletController extends Controller
 
     public function adjust(Request $request, Wallet $wallet): RedirectResponse
     {
+        abort_if($wallet->user_id !== auth()->id(), 403);
         $validated = $request->validate([
             'new_balance' => 'required|numeric|min:0',
             'note'        => 'nullable|string|max:255',
@@ -95,6 +100,8 @@ class WalletController extends Controller
 
     public function destroy(Wallet $wallet): RedirectResponse
     {
+        abort_if($wallet->user_id !== auth()->id(), 403);
+
         if ($wallet->transactions()->exists()) {
             return redirect()->route('wallets.index')->with('error', 'Dompet tidak bisa dihapus karena masih ada transaksi.');
         }

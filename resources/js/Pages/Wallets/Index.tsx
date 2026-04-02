@@ -1,7 +1,9 @@
 import AppLayout from '@/Layouts/AppLayout';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus, Pencil, Trash2, Landmark, Banknote, Wallet, ArrowUpRight } from 'lucide-react';
+import { type PageProps } from '@/types';
+import { Plus, Pencil, Trash2, Landmark, Banknote, Wallet, ArrowUpRight, ArrowLeftRight, X, ChevronDown, Check } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 
 interface WalletData {
     id: number;
@@ -27,12 +29,55 @@ const TYPE_META = {
 } as const;
 
 export default function WalletsIndex({ wallets }: Props) {
-    const flash = usePage<{ flash?: { success?: string; error?: string } }>().props.flash;
+    const flash = usePage<PageProps<{ flash?: { success?: string; error?: string } }>>().props.flash;
     const totalBalance = wallets.reduce((sum, w) => sum + Number(w.balance), 0);
 
     const handleDelete = (w: WalletData) => {
         if (!confirm('Hapus dompet ' + w.name + '?')) return;
         router.delete('/wallets/' + w.id, { preserveScroll: true });
+    };
+
+    // --- Transfer modal ---
+    const [showTransfer, setShowTransfer] = useState(false);
+    const [fromId, setFromId]             = useState('');
+    const [toId, setToId]                 = useState('');
+    const [amount, setAmount]             = useState('');
+    const [note, setNote]                 = useState('');
+    const [transferring, setTransferring] = useState(false);
+    const [pickerOpen, setPickerOpen]     = useState<'from' | 'to' | null>(null);
+    const pickerRef                       = useRef<HTMLDivElement>(null);
+
+    const fromWallet = wallets.find((w) => String(w.id) === fromId);
+    const toWallet   = wallets.find((w) => String(w.id) === toId);
+    const rawAmount  = amount.replace(/\D/g, '');
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+                setPickerOpen(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const closeTransfer = () => {
+        setShowTransfer(false);
+        setFromId(''); setToId(''); setAmount(''); setNote('');
+        setPickerOpen(null);
+    };
+
+    const handleTransfer = (e: React.FormEvent) => {
+        e.preventDefault();
+        setTransferring(true);
+        router.post(
+            '/wallets/transfer',
+            { from_wallet_id: fromId, to_wallet_id: toId, amount: rawAmount, note },
+            {
+                onSuccess: () => closeTransfer(),
+                onFinish:  () => setTransferring(false),
+            },
+        );
     };
 
     return (
@@ -46,12 +91,22 @@ export default function WalletsIndex({ wallets }: Props) {
                         <h1 className="text-2xl font-bold text-slate-800">Dompet</h1>
                         <p className="text-sm text-slate-500 mt-0.5">{wallets.length} dompet terdaftar</p>
                     </div>
-                    <Link
-                        href="/wallets/create"
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        <Plus size={16} /> Tambah
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        {wallets.length >= 2 && (
+                            <button
+                                onClick={() => setShowTransfer(true)}
+                                className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                            >
+                                <ArrowLeftRight size={15} /> Transfer
+                            </button>
+                        )}
+                        <Link
+                            href="/wallets/create"
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                            <Plus size={16} /> Tambah
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Flash messages */}
@@ -168,6 +223,214 @@ export default function WalletsIndex({ wallets }: Props) {
                     </div>
                 )}
             </div>
+
+            {/* ── Transfer Modal ── */}
+            {showTransfer && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center">
+                                    <ArrowLeftRight size={16} className="text-indigo-600" />
+                                </div>
+                                <div>
+                                    <p className="text-base font-bold text-slate-800">Transfer Antar Dompet</p>
+                                    <p className="text-xs text-slate-400">Pindahkan saldo antar dompetmu</p>
+                                </div>
+                            </div>
+                            <button onClick={closeTransfer} className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleTransfer} className="p-5 space-y-4">
+
+                            {/* Wallet pickers */}
+                            <div ref={pickerRef}>
+                                {/* From & To row */}
+                                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+                                    {/* FROM */}
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dari</p>
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPickerOpen(pickerOpen === 'from' ? null : 'from')}
+                                                className={`w-full flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
+                                                    pickerOpen === 'from'
+                                                        ? 'border-indigo-400 ring-2 ring-indigo-100 bg-white'
+                                                        : fromWallet
+                                                        ? 'border-slate-200 bg-white hover:border-indigo-300'
+                                                        : 'border-dashed border-slate-300 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50'
+                                                }`}
+                                            >
+                                                {fromWallet ? (
+                                                    <>
+                                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: fromWallet.color + '25' }}>
+                                                            <DynamicIcon name={fromWallet.icon} size={15} style={{ color: fromWallet.color }} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-bold text-slate-800 truncate">{fromWallet.name}</p>
+                                                            <p className="text-xs text-slate-400 truncate">{fmt(Number(fromWallet.balance))}</p>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-xs text-slate-400 flex-1">Pilih dompet</p>
+                                                )}
+                                                <ChevronDown size={13} className={`shrink-0 text-slate-400 transition-transform ${pickerOpen === 'from' ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {/* FROM dropdown */}
+                                            {pickerOpen === 'from' && (
+                                                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl z-10 overflow-hidden">
+                                                    {wallets.filter((w) => String(w.id) !== toId).map((w) => (
+                                                        <button
+                                                            key={w.id}
+                                                            type="button"
+                                                            onClick={() => { setFromId(String(w.id)); setPickerOpen(null); }}
+                                                            className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-50 transition-colors text-left"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: w.color + '25' }}>
+                                                                <DynamicIcon name={w.icon} size={14} style={{ color: w.color }} />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs font-semibold text-slate-800 truncate">{w.name}</p>
+                                                                <p className="text-xs text-slate-400">{fmt(Number(w.balance))}</p>
+                                                            </div>
+                                                            {String(w.id) === fromId && <Check size={13} className="text-indigo-600 shrink-0" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Arrow */}
+                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 mb-0.5">
+                                        <ArrowLeftRight size={13} className="text-indigo-600" />
+                                    </div>
+
+                                    {/* TO */}
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Ke</p>
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPickerOpen(pickerOpen === 'to' ? null : 'to')}
+                                                className={`w-full flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
+                                                    pickerOpen === 'to'
+                                                        ? 'border-indigo-400 ring-2 ring-indigo-100 bg-white'
+                                                        : toWallet
+                                                        ? 'border-slate-200 bg-white hover:border-indigo-300'
+                                                        : 'border-dashed border-slate-300 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50'
+                                                }`}
+                                            >
+                                                {toWallet ? (
+                                                    <>
+                                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: toWallet.color + '25' }}>
+                                                            <DynamicIcon name={toWallet.icon} size={15} style={{ color: toWallet.color }} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-bold text-slate-800 truncate">{toWallet.name}</p>
+                                                            <p className="text-xs text-slate-400 truncate">{fmt(Number(toWallet.balance))}</p>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-xs text-slate-400 flex-1">Pilih dompet</p>
+                                                )}
+                                                <ChevronDown size={13} className={`shrink-0 text-slate-400 transition-transform ${pickerOpen === 'to' ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {/* TO dropdown */}
+                                            {pickerOpen === 'to' && (
+                                                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl z-10 overflow-hidden">
+                                                    {wallets.filter((w) => String(w.id) !== fromId).map((w) => (
+                                                        <button
+                                                            key={w.id}
+                                                            type="button"
+                                                            onClick={() => { setToId(String(w.id)); setPickerOpen(null); }}
+                                                            className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-50 transition-colors text-left"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: w.color + '25' }}>
+                                                                <DynamicIcon name={w.icon} size={14} style={{ color: w.color }} />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs font-semibold text-slate-800 truncate">{w.name}</p>
+                                                                <p className="text-xs text-slate-400">{fmt(Number(w.balance))}</p>
+                                                            </div>
+                                                            {String(w.id) === toId && <Check size={13} className="text-indigo-600 shrink-0" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Jumlah + saldo hint */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Jumlah Transfer</label>
+                                    {fromWallet && (
+                                        <span className="text-xs text-slate-400">
+                                            Tersedia: <span className="font-semibold text-slate-600">{fmt(Number(fromWallet.balance))}</span>
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">Rp</span>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={rawAmount ? new Intl.NumberFormat('id-ID').format(Number(rawAmount)) : ''}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        placeholder="0"
+                                        required
+                                        className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition placeholder-slate-300"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Catatan */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                                    Catatan <span className="text-slate-400 font-normal normal-case">(opsional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    placeholder="Contoh: Bayar tagihan"
+                                    maxLength={255}
+                                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition placeholder-slate-300"
+                                />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={closeTransfer}
+                                    className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={transferring || !fromId || !toId || !rawAmount}
+                                    className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                                >
+                                    <ArrowLeftRight size={14} />
+                                    {transferring ? 'Memproses...' : 'Transfer Sekarang'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </AppLayout>
     );
 }

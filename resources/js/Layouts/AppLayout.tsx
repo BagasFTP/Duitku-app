@@ -11,6 +11,7 @@ import {
     Wallet,
     PiggyBank,
     BrainCircuit,
+    Target,
     LogOut,
     User,
     Menu,
@@ -18,12 +19,13 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-    { label: 'Dashboard', href: '/', icon: LayoutDashboard, routeName: 'dashboard' },
-    { label: 'Transaksi', href: '/transactions', icon: ArrowLeftRight, routeName: 'transactions.index' },
-    { label: 'Kategori', href: '/categories', icon: Tag, routeName: 'categories.index' },
-    { label: 'Dompet', href: '/wallets', icon: Wallet, routeName: 'wallets.index' },
-    { label: 'Anggaran', href: '/budget', icon: PiggyBank, routeName: 'budget.index' },
-    { label: 'Analisis AI', href: '/analysis', icon: BrainCircuit, routeName: 'analysis.index' },
+    { label: 'Dashboard',    href: '/',           icon: LayoutDashboard, routeName: 'dashboard'          },
+    { label: 'Transaksi',    href: '/transactions',icon: ArrowLeftRight,  routeName: 'transactions.index' },
+    { label: 'Kategori',     href: '/categories',  icon: Tag,             routeName: 'categories.index'   },
+    { label: 'Dompet',       href: '/wallets',     icon: Wallet,          routeName: 'wallets.index'      },
+    { label: 'Anggaran',     href: '/budget',      icon: PiggyBank,       routeName: 'budget.index'       },
+    { label: 'Target Nabung',href: '/savings',     icon: Target,          routeName: 'savings.index'      },
+    { label: 'Analisis AI',  href: '/analysis',    icon: BrainCircuit,    routeName: 'analysis.index'     },
 ];
 
 function SidebarContent({ user, onNavClick }: { user: { name: string; email: string }; onNavClick?: () => void }) {

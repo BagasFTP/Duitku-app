@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -96,6 +97,62 @@ class WalletController extends Controller
         }
 
         return redirect()->route('wallets.edit', $wallet)->with('success', 'Saldo berhasil disesuaikan.');
+    }
+
+    public function transfer(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'from_wallet_id' => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
+            'to_wallet_id'   => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
+            'amount'         => 'required|numeric|min:1',
+            'note'           => 'nullable|string|max:255',
+        ]);
+
+        if ($validated['from_wallet_id'] === $validated['to_wallet_id']) {
+            return back()->with('error', 'Dompet asal dan tujuan tidak boleh sama.');
+        }
+
+        $from = Wallet::find($validated['from_wallet_id']);
+        $to   = Wallet::find($validated['to_wallet_id']);
+
+        if ((float) $from->balance < (float) $validated['amount']) {
+            return back()->with('error', 'Saldo dompet asal tidak mencukupi.');
+        }
+
+        $amount = (float) $validated['amount'];
+        $note   = $validated['note'] ?? null;
+        $date   = now()->toDateString();
+
+        $descOut = 'Transfer ke ' . $to->name . ($note ? ' — ' . $note : '');
+        $descIn  = 'Transfer dari ' . $from->name . ($note ? ' — ' . $note : '');
+
+        Transaction::create([
+            'user_id'      => auth()->id(),
+            'wallet_id'    => $from->id,
+            'category_id'  => null,
+            'amount'       => $amount,
+            'type'         => 'adjustment',
+            'description'  => $descOut,
+            'date'         => $date,
+            'is_recurring' => false,
+        ]);
+
+        Transaction::create([
+            'user_id'      => auth()->id(),
+            'wallet_id'    => $to->id,
+            'category_id'  => null,
+            'amount'       => $amount,
+            'type'         => 'adjustment',
+            'description'  => $descIn,
+            'date'         => $date,
+            'is_recurring' => false,
+        ]);
+
+        $from->decrement('balance', $amount);
+        $to->increment('balance', $amount);
+
+        return redirect()->route('wallets.index')
+            ->with('success', 'Transfer berhasil.');
     }
 
     public function destroy(Wallet $wallet): RedirectResponse

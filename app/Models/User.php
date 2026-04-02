@@ -7,6 +7,7 @@ use App\Models\AiAnalysis;
 use App\Models\Budget;
 use App\Models\Category;
 use App\Models\ChatMessage;
+use App\Models\SavingsGoal;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use Database\Factories\UserFactory;
@@ -81,5 +82,10 @@ class User extends Authenticatable
     public function aiAnalyses()
     {
         return $this->hasMany(AiAnalysis::class);
+    }
+
+    public function savingsGoals()
+    {
+        return $this->hasMany(SavingsGoal::class);
     }
 }

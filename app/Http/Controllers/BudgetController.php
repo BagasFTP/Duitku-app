@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -173,7 +174,7 @@ class BudgetController extends Controller
     {
         $validated = $request->validate([
             'budgets'               => 'required|array',
-            'budgets.*.category_id' => 'required|exists:categories,id',
+            'budgets.*.category_id' => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
             'budgets.*.amount'      => 'required|numeric|min:0',
             'month'                 => 'required|integer|min:1|max:12',
             'year'                  => 'required|integer|min:2000',
@@ -183,17 +184,27 @@ class BudgetController extends Controller
         $month = $validated['month'];
 
         foreach ($validated['budgets'] as $item) {
-            Budget::updateOrCreate(
-                [
-                    'user_id'     => auth()->id(),
-                    'category_id' => $item['category_id'],
-                    'period_type' => 'monthly',
-                    'year'        => $year,
-                    'month'       => $month,
-                    'week'        => null,
-                ],
-                ['amount' => $item['amount']]
-            );
+            if ((float) $item['amount'] === 0.0) {
+                // Hapus budget jika amount di-set ke 0
+                Budget::where('user_id', auth()->id())
+                    ->where('category_id', $item['category_id'])
+                    ->where('period_type', 'monthly')
+                    ->where('year', $year)
+                    ->where('month', $month)
+                    ->delete();
+            } else {
+                Budget::updateOrCreate(
+                    [
+                        'user_id'     => auth()->id(),
+                        'category_id' => $item['category_id'],
+                        'period_type' => 'monthly',
+                        'year'        => $year,
+                        'month'       => $month,
+                        'week'        => null,
+                    ],
+                    ['amount' => $item['amount']]
+                );
+            }
         }
 
         Cache::forget('budget_alerts_' . auth()->id() . "_{$year}_{$month}");

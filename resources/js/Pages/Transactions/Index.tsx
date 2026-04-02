@@ -1,7 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
 import DynamicIcon from '@/Components/DynamicIcon';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ChevronDown, Check, SlidersHorizontal } from 'lucide-react';
+import { type PageProps } from '@/types';
+import { Plus, Trash2, Pencil, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ChevronDown, Check, SlidersHorizontal, Download } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useState, useRef, useEffect } from 'react';
@@ -63,7 +64,7 @@ const formatRupiah = (value: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 
 export default function TransactionsIndex({ transactions, categories, wallets, filters }: Props) {
-    const { props } = usePage<{ flash?: { success?: string } }>();
+    const { props } = usePage<PageProps<{ flash?: { success?: string } }>>();
     const flash = props.flash;
 
     const now = new Date();
@@ -107,6 +108,12 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
         router.get('/transactions', params, { preserveState: true, replace: true });
     };
 
+    const buildExportUrl = () => {
+        const params = new URLSearchParams();
+        Object.entries(localFilters).forEach(([k, v]) => { if (v) params.set(k, v); });
+        return '/transactions/export?' + params.toString();
+    };
+
     const handleDelete = (trx: Transaction) => {
         if (!confirm(`Hapus transaksi "${trx.description || trx.category?.name || 'ini'}"?`)) return;
         router.delete(`/transactions/${trx.id}`, { preserveScroll: true });
@@ -127,12 +134,20 @@ export default function TransactionsIndex({ transactions, categories, wallets, f
                         <h1 className="text-2xl font-bold text-slate-800">Transaksi</h1>
                         <p className="text-sm text-slate-500 mt-0.5">Kelola semua transaksi keuangan kamu</p>
                     </div>
-                    <Link
-                        href="/transactions/create"
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200 hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        <Plus size={16} /> Tambah
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <a
+                            href={buildExportUrl()}
+                            className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                            <Download size={15} /> CSV
+                        </a>
+                        <Link
+                            href="/transactions/create"
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md shadow-indigo-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                            <Plus size={16} /> Tambah
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Flash */}

@@ -204,6 +204,52 @@ class TransactionController extends Controller
         ];
     }
 
+    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $query = Transaction::with(['category', 'wallet'])
+            ->where('user_id', auth()->id())
+            ->latest('date');
+
+        if ($request->filled('month') && $request->filled('year')) {
+            $query->whereMonth('date', $request->month)
+                  ->whereYear('date', $request->year);
+        }
+        if ($request->filled('type'))        $query->where('type', $request->type);
+        if ($request->filled('category_id')) $query->where('category_id', $request->category_id);
+        if ($request->filled('wallet_id'))   $query->where('wallet_id', $request->wallet_id);
+
+        $transactions = $query->get();
+
+        $filename = 'transaksi-' . ($request->filled('month') && $request->filled('year')
+            ? Carbon::createFromDate($request->year, $request->month, 1)->format('Y-m')
+            : 'semua') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        return response()->stream(function () use ($transactions) {
+            $out = fopen('php://output', 'w');
+            // BOM agar Excel baca UTF-8 dengan benar
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Tanggal', 'Tipe', 'Kategori', 'Dompet', 'Jumlah', 'Keterangan'], ';');
+
+            foreach ($transactions as $t) {
+                fputcsv($out, [
+                    $t->date,
+                    $t->type,
+                    $t->category?->name ?? '-',
+                    $t->wallet?->name   ?? '-',
+                    number_format($t->amount, 2, ',', '.'),
+                    $t->description ?? '',
+                ], ';');
+            }
+
+            fclose($out);
+        }, 200, $headers);
+    }
+
     public function syncOffline(Request $request): \Illuminate\Http\JsonResponse
     {
         $validated = $request->validate([

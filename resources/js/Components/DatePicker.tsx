@@ -32,7 +32,6 @@ export default function DatePicker({ value, onChange, error }: Props) {
 
     const select = (day: Date) => {
         onChange(format(day, 'yyyy-MM-dd'));
-        setOpen(false);
     };
 
     // Build calendar grid
@@ -151,9 +150,17 @@ export default function DatePicker({ value, onChange, error }: Props) {
                             <button
                                 type="button"
                                 onClick={() => onChange(format(new Date(), 'yyyy-MM-dd'))}
-                                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                             >
                                 Hari ini
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOpen(false)}
+                                disabled={!selected}
+                                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white transition-colors"
+                            >
+                                Pilih
                             </button>
                         </div>
                     </div>

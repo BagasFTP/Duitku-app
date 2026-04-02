@@ -1,5 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import DynamicIcon from '@/Components/DynamicIcon';
+import DatePicker from '@/Components/DatePicker';
 import { Head, router, usePage } from '@inertiajs/react';
 import { type PageProps } from '@/types';
 import {
@@ -372,11 +373,9 @@ export default function SavingsGoalsIndex({ goals, wallets }: Props) {
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                                     Deadline <span className="text-slate-400 font-normal normal-case">(opsional)</span>
                                 </label>
-                                <input
-                                    type="date"
+                                <DatePicker
                                     value={form.deadline}
-                                    onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                                    onChange={(val) => setForm({ ...form, deadline: val })}
                                 />
                             </div>
 

@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,8 +62,8 @@ class TransactionController extends Controller
             'type'         => 'required|in:income,expense',
             'description'  => 'nullable|string|max:255',
             'date'         => 'required|date',
-            'category_id'  => 'required|exists:categories,id',
-            'wallet_id'    => 'required|exists:wallets,id',
+            'category_id'  => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
+            'wallet_id'    => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
             'is_recurring' => 'boolean',
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
@@ -98,6 +99,8 @@ class TransactionController extends Controller
 
     public function edit(Transaction $transaction): Response
     {
+        abort_if($transaction->user_id !== auth()->id(), 403);
+
         return Inertia::render('Transactions/Edit', [
             'transaction' => $transaction->load(['category', 'wallet']),
             'categories'  => Category::where('user_id', auth()->id())->orderBy('type')->orderBy('name')->get(),
@@ -107,13 +110,15 @@ class TransactionController extends Controller
 
     public function update(Request $request, Transaction $transaction): RedirectResponse
     {
+        abort_if($transaction->user_id !== auth()->id(), 403);
+
         $validated = $request->validate([
             'amount'       => 'required|numeric|min:0',
             'type'         => 'required|in:income,expense',
             'description'  => 'nullable|string|max:255',
             'date'         => 'required|date',
-            'category_id'  => 'required|exists:categories,id',
-            'wallet_id'    => 'required|exists:wallets,id',
+            'category_id'  => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
+            'wallet_id'    => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
             'is_recurring' => 'boolean',
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
@@ -248,6 +253,8 @@ class TransactionController extends Controller
 
     public function destroy(Transaction $transaction): RedirectResponse
     {
+        abort_if($transaction->user_id !== auth()->id(), 403);
+
         // Adjustment records don't have an invertible delta — skip balance revert
         if ($transaction->type !== 'adjustment') {
             $wallet = $transaction->wallet;

@@ -189,6 +189,23 @@ CONTEXT;
             [
                 'type'     => 'function',
                 'function' => [
+                    'name'        => 'create_budget',
+                    'description' => 'Membuat atau memperbarui anggaran (budget) pengeluaran untuk kategori tertentu pada bulan tertentu. Gunakan HANYA jika user minta buat/set/ubah anggaran — BUKAN untuk mencatat transaksi.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'category_id' => ['type' => 'integer', 'description' => 'ID kategori pengeluaran (lihat daftar kategori di context)'],
+                            'amount'      => ['type' => 'number', 'description' => 'Batas anggaran dalam Rupiah'],
+                            'month'       => ['type' => 'integer', 'description' => 'Bulan (1-12). Default bulan ini jika tidak disebutkan.'],
+                            'year'        => ['type' => 'integer', 'description' => 'Tahun (misal 2026). Default tahun ini jika tidak disebutkan.'],
+                        ],
+                        'required'   => ['category_id', 'amount'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
                     'name'        => 'contribute_to_savings',
                     'description' => 'Menambah uang ke target tabungan. Bisa sekaligus mengurangi saldo dompet.',
                     'parameters'  => [
@@ -212,10 +229,11 @@ CONTEXT;
     {
         try {
             return match ($name) {
-                'create_transaction'      => $this->toolCreateTransaction($args, $userId),
+                'create_transaction'       => $this->toolCreateTransaction($args, $userId),
                 'transfer_between_wallets' => $this->toolTransfer($args, $userId),
-                'contribute_to_savings'   => $this->toolContribute($args, $userId),
-                default                   => ['success' => false, 'message' => "Tool '{$name}' tidak dikenal."],
+                'create_budget'            => $this->toolCreateBudget($args, $userId),
+                'contribute_to_savings'    => $this->toolContribute($args, $userId),
+                default                    => ['success' => false, 'message' => "Tool '{$name}' tidak dikenal."],
             };
         } catch (\Exception $e) {
             return ['success' => false, 'message' => 'Gagal: ' . $e->getMessage()];
@@ -264,6 +282,30 @@ CONTEXT;
             'label'    => "{$label} berhasil dicatat",
             'detail'   => "Rp " . number_format($amount, 0, ',', '.') . " · {$catName} · {$walletName}",
             'data'     => ['transaction_id' => $trx->id, 'wallet' => $walletName, 'category' => $catName, 'amount' => $amount, 'type' => $type],
+        ];
+    }
+
+    private function toolCreateBudget(array $args, int $userId): array
+    {
+        $cat    = Category::where('id', $args['category_id'])->where('user_id', $userId)->where('type', 'expense')->firstOrFail();
+        $amount = (float) $args['amount'];
+        $month  = (int) ($args['month'] ?? Carbon::now()->month);
+        $year   = (int) ($args['year']  ?? Carbon::now()->year);
+
+        Budget::updateOrCreate(
+            ['user_id' => $userId, 'category_id' => $cat->id, 'month' => $month, 'year' => $year],
+            ['amount' => $amount, 'period_type' => 'monthly']
+        );
+
+        $catName   = (string) $cat->name;
+        $monthName = Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y');
+
+        return [
+            'success' => true,
+            'type'    => 'budget',
+            'label'   => 'Anggaran berhasil disimpan',
+            'detail'  => "Rp " . number_format($amount, 0, ',', '.') . " · {$catName} · {$monthName}",
+            'data'    => ['category' => $catName, 'amount' => $amount, 'month' => $month, 'year' => $year],
         ];
     }
 
@@ -367,19 +409,20 @@ Kamu adalah asisten keuangan pribadi yang bisa membaca DAN mengubah data keuanga
 
 Kemampuan kamu:
 1. Menjawab pertanyaan tentang keuangan
-2. Mencatat satu transaksi → create_transaction
+2. Mencatat transaksi pemasukan/pengeluaran → create_transaction
 3. Pindahkan uang antar dompet → transfer_between_wallets
-4. Menabung → contribute_to_savings
+4. Buat/set anggaran bulanan → create_budget
+5. Menabung ke target tabungan → contribute_to_savings
 
-ATURAN PEMILIHAN TOOL:
-- User sebut DUA dompet ("dari X ke Y", "pindah dari X ke Y", "transfer ke Y dari X") → WAJIB pakai transfer_between_wallets, JANGAN pakai create_transaction
-- User hanya sebut SATU dompet untuk catat pengeluaran/pemasukan → pakai create_transaction
-- Kata kunci transfer: pindah, kirim, transfer, dari [dompet A] ke [dompet B]
-- JANGAN pernah catat hanya satu sisi ketika user bermaksud memindahkan uang antar dompet
+ATURAN PEMILIHAN TOOL — baca dengan cermat:
+- "buat anggaran", "set budget", "anggaran makan", "limit pengeluaran" → WAJIB create_budget, BUKAN create_transaction
+- "catat pengeluaran", "beli", "bayar", "keluar uang" → create_transaction
+- "transfer", "pindah", "kirim" + dua dompet → transfer_between_wallets
+- "tabung", "nabung", "cicil target" → contribute_to_savings
 
 ATURAN UMUM:
-- Jika ada ambiguitas nama dompet atau jumlah tidak jelas, tanya dulu sebelum eksekusi
-- Jangan mengarang saldo dompet setelah transaksi — cukup konfirmasi tindakan yang dilakukan
+- Jika ada ambiguitas, tanya dulu sebelum eksekusi
+- Jangan mengarang saldo atau data setelah tindakan
 - Jawab Bahasa Indonesia, singkat dan ramah
 SYSTEM;
 

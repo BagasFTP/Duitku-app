@@ -3,7 +3,7 @@ import axios from 'axios';
 import { router } from '@inertiajs/react';
 import {
     MessageCircle, X, Send, Trash2, Bot, User, Loader2,
-    CheckCircle2, ArrowLeftRight, PiggyBank, TrendingUp, TrendingDown,
+    CheckCircle2, ArrowLeftRight, PiggyBank, TrendingUp, TrendingDown, Wallet,
 } from 'lucide-react';
 
 interface ActionResult {
@@ -36,12 +36,14 @@ function ActionCard({ result }: { result: ActionResult }) {
             ? <TrendingUp size={13} className="text-emerald-600" />
             : <TrendingDown size={13} className="text-rose-500" />,
         transfer: <ArrowLeftRight size={13} className="text-indigo-600" />,
+        budget:   <Wallet size={13} className="text-amber-600" />,
         savings:  <PiggyBank size={13} className="text-violet-600" />,
     };
 
     const colors: Record<string, string> = {
         transaction: result.data?.type === 'income' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200',
         transfer:    'bg-indigo-50 border-indigo-200',
+        budget:      'bg-amber-50 border-amber-200',
         savings:     'bg-violet-50 border-violet-200',
     };
 

@@ -12,6 +12,7 @@ class AiAnalysis extends Model
         'year',
         'result',
         'health_score',
+        'status',
     ];
 
     protected function casts(): array

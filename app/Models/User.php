@@ -29,6 +29,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'two_factor_secret',
+        'two_factor_confirmed_at',
     ];
 
     /**
@@ -39,6 +41,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
     ];
 
     /**
@@ -50,8 +53,25 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'two_factor_confirmed_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function hasTwoFactorEnabled(): bool
+    {
+        return ! is_null($this->two_factor_secret) && ! is_null($this->two_factor_confirmed_at);
+    }
+
+    public function twoFactorQrCodeUrl(): string
+    {
+        $google2fa = new \PragmaRX\Google2FA\Google2FA();
+
+        return $google2fa->getQRCodeUrl(
+            config('app.name'),
+            $this->email,
+            $this->two_factor_secret
+        );
     }
 
     public function wallets()

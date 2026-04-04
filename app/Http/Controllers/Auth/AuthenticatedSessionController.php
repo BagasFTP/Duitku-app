@@ -33,6 +33,14 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        if ($request->user()->hasTwoFactorEnabled()) {
+            $request->session()->put('two_factor_verified', false);
+
+            return redirect()->route('two-factor.challenge');
+        }
+
+        $request->session()->put('two_factor_verified', true);
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

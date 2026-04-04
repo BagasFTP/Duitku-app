@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,6 +34,30 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+});
+
+// 2FA challenge — accessible when authenticated but 2FA not yet verified
+Route::middleware('auth')->group(function () {
+    Route::get('two-factor-challenge', [TwoFactorController::class, 'challenge'])
+        ->name('two-factor.challenge');
+
+    Route::post('two-factor-challenge', [TwoFactorController::class, 'verify'])
+        ->name('two-factor.verify');
+});
+
+// 2FA management — fully authenticated (2FA verified)
+Route::middleware(['auth', 'two-factor'])->group(function () {
+    Route::post('user/two-factor-authentication', [TwoFactorController::class, 'store'])
+        ->name('two-factor.store');
+
+    Route::get('user/two-factor-qr-code', [TwoFactorController::class, 'show'])
+        ->name('two-factor.show');
+
+    Route::post('user/two-factor-authentication/confirm', [TwoFactorController::class, 'confirm'])
+        ->name('two-factor.confirm');
+
+    Route::delete('user/two-factor-authentication', [TwoFactorController::class, 'destroy'])
+        ->name('two-factor.destroy');
 });
 
 Route::middleware('auth')->group(function () {

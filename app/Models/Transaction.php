@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Transaction extends Model
 {
@@ -46,6 +47,11 @@ class Transaction extends Model
         return $this->belongsTo(Wallet::class);
     }
 
+    public function logs(): HasMany
+    {
+        return $this->hasMany(TransactionLog::class)->latest('created_at');
+    }
+
     public function calculateNextOccurrence(Carbon $from = null): Carbon
     {
         $base = $from ?? Carbon::parse($this->date);
@@ -63,6 +69,7 @@ class Transaction extends Model
         $next = $this->next_occurrence_at ?? $this->calculateNextOccurrence();
 
         return new self([
+            'user_id'            => $this->user_id,
             'amount'             => $this->amount,
             'type'               => $this->type,
             'description'        => $this->description,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Services\TransactionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -10,6 +11,7 @@ use Inertia\Response;
 
 class CategoryController extends Controller
 {
+    public function __construct(private TransactionService $txService) {}
     public function index(): Response
     {
         return Inertia::render('Categories/Index', [
@@ -34,6 +36,7 @@ class CategoryController extends Controller
 
         $validated['user_id'] = auth()->id();
         Category::create($validated);
+        $this->txService->forgetUserCategoryCache(auth()->id());
 
         return redirect()->route('categories.index')->with('success', 'Kategori berhasil ditambahkan.');
     }
@@ -60,6 +63,7 @@ class CategoryController extends Controller
         ]);
 
         $category->update($validated);
+        $this->txService->forgetUserCategoryCache(auth()->id());
 
         return redirect()->route('categories.index')->with('success', 'Kategori berhasil diperbarui.');
     }
@@ -73,6 +77,7 @@ class CategoryController extends Controller
         }
 
         $category->delete();
+        $this->txService->forgetUserCategoryCache(auth()->id());
 
         return redirect()->route('categories.index')->with('success', 'Kategori berhasil dihapus.');
     }

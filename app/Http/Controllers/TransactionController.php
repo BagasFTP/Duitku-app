@@ -2,20 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Budget;
 use App\Models\Transaction;
-use App\Models\Category;
 use App\Models\Wallet;
+use App\Services\TransactionService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class TransactionController extends Controller
 {
+    public function __construct(private TransactionService $txService) {}
+
     public function index(Request $request): Response
     {
         $query = Transaction::with(['category', 'wallet'])
@@ -27,31 +27,27 @@ class TransactionController extends Controller
                   ->whereYear('date', $request->year);
         }
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->type);
-        }
+        if ($request->filled('type'))        $query->where('type', $request->type);
+        if ($request->filled('category_id')) $query->where('category_id', $request->category_id);
+        if ($request->filled('wallet_id'))   $query->where('wallet_id', $request->wallet_id);
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
-
-        if ($request->filled('wallet_id')) {
-            $query->where('wallet_id', $request->wallet_id);
-        }
+        $userId = auth()->id();
 
         return Inertia::render('Transactions/Index', [
             'transactions' => $query->paginate(20)->withQueryString(),
-            'categories'   => Category::where('user_id', auth()->id())->orderBy('name')->get(),
-            'wallets'      => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
+            'categories'   => $this->txService->getCategoriesByUser($userId),
+            'wallets'      => $this->txService->getWalletsByUser($userId),
             'filters'      => $request->only(['month', 'year', 'type', 'category_id', 'wallet_id']),
         ]);
     }
 
     public function create(): Response
     {
+        $userId = auth()->id();
+
         return Inertia::render('Transactions/Create', [
-            'categories' => Category::where('user_id', auth()->id())->orderBy('type')->orderBy('name')->get(),
-            'wallets'    => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
+            'categories' => $this->txService->getCategoriesByUser($userId),
+            'wallets'    => $this->txService->getWalletsByUser($userId),
         ]);
     }
 
@@ -68,29 +64,11 @@ class TransactionController extends Controller
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
 
-        if (!empty($validated['is_recurring']) && !empty($validated['recur_type'])) {
-            $base = Carbon::parse($validated['date']);
-            $validated['next_occurrence_at'] = match ($validated['recur_type']) {
-                'daily'   => $base->copy()->addDay()->toDateString(),
-                'weekly'  => $base->copy()->addWeek()->toDateString(),
-                'monthly' => $base->copy()->addMonth()->toDateString(),
-            };
-        }
-
         $validated['user_id'] = auth()->id();
-        $transaction = Transaction::create($validated);
+        $transaction = $this->txService->createWithBalance($validated);
 
-        // Update saldo wallet
-        $wallet = $transaction->wallet;
-        if ($transaction->type === 'income') {
-            $wallet->increment('balance', $transaction->amount);
-        } else {
-            $wallet->decrement('balance', $transaction->amount);
-        }
-
-        $budgetAlert = $this->checkBudgetAlert($transaction->category_id, $transaction->date);
-
-        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
+        $budgetAlert = $this->txService->checkBudgetAlert($transaction->category_id, $transaction->date, auth()->id());
+        $this->txService->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
 
         return redirect()->route('transactions.index')
             ->with('success', 'Transaksi berhasil ditambahkan.')
@@ -101,10 +79,12 @@ class TransactionController extends Controller
     {
         abort_if($transaction->user_id !== auth()->id(), 403);
 
+        $userId = auth()->id();
+
         return Inertia::render('Transactions/Edit', [
             'transaction' => $transaction->load(['category', 'wallet']),
-            'categories'  => Category::where('user_id', auth()->id())->orderBy('type')->orderBy('name')->get(),
-            'wallets'     => Wallet::where('user_id', auth()->id())->orderBy('name')->get(),
+            'categories'  => $this->txService->getCategoriesByUser($userId),
+            'wallets'     => $this->txService->getWalletsByUser($userId),
         ]);
     }
 
@@ -123,85 +103,22 @@ class TransactionController extends Controller
             'recur_type'   => 'nullable|in:daily,weekly,monthly|required_if:is_recurring,true',
         ]);
 
-        if (!empty($validated['is_recurring']) && !empty($validated['recur_type'])) {
-            $base = Carbon::parse($validated['date']);
-            $validated['next_occurrence_at'] = match ($validated['recur_type']) {
-                'daily'   => $base->copy()->addDay()->toDateString(),
-                'weekly'  => $base->copy()->addWeek()->toDateString(),
-                'monthly' => $base->copy()->addMonth()->toDateString(),
-            };
-        } else {
-            $validated['next_occurrence_at'] = null;
-        }
+        $validated = $this->txService->prepareRecurring($validated);
 
-        // Revert saldo wallet lama
-        $oldWallet = $transaction->wallet;
-        if ($transaction->type === 'income') {
-            $oldWallet->decrement('balance', $transaction->amount);
-        } else {
-            $oldWallet->increment('balance', $transaction->amount);
-        }
+        // Revert saldo wallet lama, lalu terapkan saldo wallet baru
+        $this->txService->revertBalance($transaction->wallet, $transaction->type, (float) $transaction->amount);
 
         $transaction->update($validated);
 
-        // Terapkan saldo wallet baru
         $newWallet = Wallet::find($validated['wallet_id']);
-        if ($validated['type'] === 'income') {
-            $newWallet->increment('balance', $validated['amount']);
-        } else {
-            $newWallet->decrement('balance', $validated['amount']);
-        }
+        $this->txService->applyBalance($newWallet, $validated['type'], (float) $validated['amount']);
 
-        $budgetAlert = $this->checkBudgetAlert($validated['category_id'], $validated['date']);
-
-        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($validated['date']));
+        $budgetAlert = $this->txService->checkBudgetAlert($validated['category_id'], $validated['date'], auth()->id());
+        $this->txService->forgetBudgetAlertCache(auth()->id(), Carbon::parse($validated['date']));
 
         return redirect()->route('transactions.index')
             ->with('success', 'Transaksi berhasil diperbarui.')
             ->with('budget_alert', $budgetAlert);
-    }
-
-    private function forgetBudgetAlertCache(int $userId, Carbon $date): void
-    {
-        Cache::forget("budget_alerts_{$userId}_{$date->year}_{$date->month}");
-    }
-
-    private function checkBudgetAlert(?int $categoryId, string $date): ?array
-    {
-        if (! $categoryId) return null;
-
-        $txDate = Carbon::parse($date);
-        $now    = Carbon::now();
-
-        // Hanya cek transaksi bulan ini
-        if ($txDate->month !== $now->month || $txDate->year !== $now->year) return null;
-
-        $budget = Budget::where('user_id', auth()->id())
-            ->where('category_id', $categoryId)
-            ->where('month', $txDate->month)
-            ->where('year', $txDate->year)
-            ->where('amount', '>', 0)
-            ->first();
-
-        if (! $budget) return null;
-
-        $totalSpent = Transaction::where('user_id', auth()->id())
-            ->where('type', 'expense')
-            ->where('category_id', $categoryId)
-            ->whereMonth('date', $txDate->month)
-            ->whereYear('date', $txDate->year)
-            ->sum('amount');
-
-        $limit = (float) $budget->amount;
-        $pct   = $limit > 0 ? ($totalSpent / $limit) * 100 : 0;
-
-        if ($pct < 80) return null;
-
-        return [
-            'category'   => $budget->category->name,
-            'percentage' => (int) round($pct),
-            'type'       => $pct >= 100 ? 'over' : 'near',
-        ];
     }
 
     public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
@@ -269,24 +186,8 @@ class TransactionController extends Controller
 
         foreach ($validated['items'] as $item) {
             try {
-                if (!empty($item['is_recurring']) && !empty($item['recur_type'])) {
-                    $base = Carbon::parse($item['date']);
-                    $item['next_occurrence_at'] = match ($item['recur_type']) {
-                        'daily'   => $base->copy()->addDay()->toDateString(),
-                        'weekly'  => $base->copy()->addWeek()->toDateString(),
-                        'monthly' => $base->copy()->addMonth()->toDateString(),
-                    };
-                }
-
                 $item['user_id'] = auth()->id();
-                $transaction = Transaction::create($item);
-
-                $wallet = $transaction->wallet;
-                if ($transaction->type === 'income') {
-                    $wallet->increment('balance', $transaction->amount);
-                } else {
-                    $wallet->decrement('balance', $transaction->amount);
-                }
+                $this->txService->createWithBalance($item);
 
                 $results[] = ['tempId' => $item['tempId'], 'success' => true];
             } catch (\Exception $e) {
@@ -303,15 +204,10 @@ class TransactionController extends Controller
 
         // Adjustment records don't have an invertible delta — skip balance revert
         if ($transaction->type !== 'adjustment') {
-            $wallet = $transaction->wallet;
-            if ($transaction->type === 'income') {
-                $wallet->decrement('balance', $transaction->amount);
-            } else {
-                $wallet->increment('balance', $transaction->amount);
-            }
+            $this->txService->revertBalance($transaction->wallet, $transaction->type, (float) $transaction->amount);
         }
 
-        $this->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
+        $this->txService->forgetBudgetAlertCache(auth()->id(), Carbon::parse($transaction->date));
 
         $transaction->delete();
 

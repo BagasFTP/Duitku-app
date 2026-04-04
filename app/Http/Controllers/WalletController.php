@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use App\Models\Wallet;
+use App\Services\TransactionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,6 +13,7 @@ use Inertia\Response;
 
 class WalletController extends Controller
 {
+    public function __construct(private TransactionService $txService) {}
     public function index(): Response
     {
         return Inertia::render('Wallets/Index', [
@@ -36,6 +38,7 @@ class WalletController extends Controller
 
         $validated['user_id'] = auth()->id();
         Wallet::create($validated);
+        $this->txService->forgetUserWalletCache(auth()->id());
 
         return redirect()->route('wallets.index')->with('success', 'Dompet berhasil ditambahkan.');
     }
@@ -61,6 +64,7 @@ class WalletController extends Controller
         ]);
 
         $wallet->update($validated);
+        $this->txService->forgetUserWalletCache(auth()->id());
 
         return redirect()->route('wallets.index')->with('success', 'Dompet berhasil diperbarui.');
     }
@@ -164,6 +168,7 @@ class WalletController extends Controller
         }
 
         $wallet->delete();
+        $this->txService->forgetUserWalletCache(auth()->id());
 
         return redirect()->route('wallets.index')->with('success', 'Dompet berhasil dihapus.');
     }

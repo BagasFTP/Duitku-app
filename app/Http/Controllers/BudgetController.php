@@ -114,10 +114,21 @@ class BudgetController extends Controller
     {
         $month = $request->integer('month', Carbon::now()->month);
 
+        $prevDate  = Carbon::createFromDate($year, $month, 1)->subMonth();
+        $prevMonth = $prevDate->month;
+        $prevYear  = $prevDate->year;
+
         $budgets = Budget::where('user_id', auth()->id())
             ->where('period_type', 'monthly')
             ->where('month', $month)
             ->where('year', $year)
+            ->get()
+            ->keyBy('category_id');
+
+        $prevBudgets = Budget::where('user_id', auth()->id())
+            ->where('period_type', 'monthly')
+            ->where('month', $prevMonth)
+            ->where('year', $prevYear)
             ->get()
             ->keyBy('category_id');
 
@@ -141,20 +152,40 @@ class BudgetController extends Controller
             ->groupBy('category_id')
             ->pluck('total', 'category_id');
 
-        $budgetData = $categories->map(function ($category) use ($budgets, $fallbacks, $actuals) {
+        $prevActuals = Transaction::where('user_id', auth()->id())
+            ->where('type', 'expense')
+            ->whereMonth('date', $prevMonth)
+            ->whereYear('date', $prevYear)
+            ->selectRaw('category_id, SUM(amount) as total')
+            ->groupBy('category_id')
+            ->pluck('total', 'category_id');
+
+        $budgetData = $categories->map(function ($category) use ($budgets, $fallbacks, $actuals, $prevBudgets, $prevActuals) {
             $budget   = $budgets->get($category->id);
             $fallback = $fallbacks->get($category->id);
-            $limit    = $budget?->amount ?? $fallback?->amount ?? $category->budget ?? 0;
-            $actual   = $actuals->get($category->id, 0);
+            $limit    = (float) ($budget?->amount ?? $fallback?->amount ?? $category->budget ?? 0);
+            $actual   = (float) $actuals->get($category->id, 0);
+
+            $rolloverAmount = 0.0;
+            $prevBudget = $prevBudgets->get($category->id);
+            if ($prevBudget?->rollover_enabled) {
+                $prevRemaining = (float) $prevBudget->amount - (float) ($prevActuals->get($category->id, 0));
+                $rolloverAmount = max(0.0, $prevRemaining);
+            }
+
+            $effectiveLimit = $limit + $rolloverAmount;
 
             return [
-                'category'    => $category,
-                'budget_id'   => $budget?->id,
-                'limit'       => $limit,
-                'actual'      => $actual,
-                'remaining'   => $limit - $actual,
-                'percentage'  => $limit > 0 ? round(($actual / $limit) * 100) : 0,
-                'is_fallback' => $budget === null && ($fallback !== null || $category->budget > 0),
+                'category'         => $category,
+                'budget_id'        => $budget?->id,
+                'limit'            => $limit,
+                'actual'           => $actual,
+                'remaining'        => $effectiveLimit - $actual,
+                'percentage'       => $effectiveLimit > 0 ? round(($actual / $effectiveLimit) * 100) : 0,
+                'is_fallback'      => $budget === null && ($fallback !== null || $category->budget > 0),
+                'rollover_amount'  => $rolloverAmount,
+                'rollover_enabled' => (bool) ($budget?->rollover_enabled ?? false),
+                'effective_limit'  => $effectiveLimit,
             ];
         });
 
@@ -173,11 +204,12 @@ class BudgetController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'budgets'               => 'required|array',
-            'budgets.*.category_id' => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
-            'budgets.*.amount'      => 'required|numeric|min:0',
-            'month'                 => 'required|integer|min:1|max:12',
-            'year'                  => 'required|integer|min:2000',
+            'budgets'                    => 'required|array',
+            'budgets.*.category_id'      => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
+            'budgets.*.amount'           => 'required|numeric|min:0',
+            'budgets.*.rollover_enabled' => 'sometimes|boolean',
+            'month'                      => 'required|integer|min:1|max:12',
+            'year'                       => 'required|integer|min:2000',
         ]);
 
         $year  = $validated['year'];
@@ -202,7 +234,10 @@ class BudgetController extends Controller
                         'month'       => $month,
                         'week'        => null,
                     ],
-                    ['amount' => $item['amount']]
+                    [
+                        'amount'           => $item['amount'],
+                        'rollover_enabled' => $item['rollover_enabled'] ?? false,
+                    ]
                 );
             }
         }

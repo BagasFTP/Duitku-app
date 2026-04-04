@@ -4,7 +4,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import {
     ChevronLeft, ChevronRight, Save,
     AlertTriangle, CheckCircle2, TrendingDown,
-    CalendarDays, Calendar, Zap, TrendingUp, Minus,
+    CalendarDays, Calendar, Zap, TrendingUp, Minus, RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -28,6 +28,9 @@ interface BudgetItem {
     remaining: number;
     percentage: number;
     is_fallback: boolean;
+    rollover_amount: number;
+    rollover_enabled: boolean;
+    effective_limit: number;
 }
 
 interface PaceItem {
@@ -89,6 +92,13 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
         });
         return init;
     });
+    const [rollovers, setRollovers] = useState<Record<number, boolean>>(() => {
+        const init: Record<number, boolean> = {};
+        (budgetData ?? []).forEach((item) => {
+            init[item.category.id] = item.rollover_enabled;
+        });
+        return init;
+    });
     const [saving, setSaving] = useState(false);
 
     // --- Navigation ---
@@ -124,7 +134,11 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
     const handleSave = () => {
         const budgets = Object.entries(amounts)
             .filter(([, v]) => v !== '' && Number(v) >= 0)
-            .map(([catId, amount]) => ({ category_id: Number(catId), amount: Number(amount) }));
+            .map(([catId, amount]) => ({
+                category_id:      Number(catId),
+                amount:           Number(amount),
+                rollover_enabled: rollovers[Number(catId)] ?? false,
+            }));
 
         if (budgets.length === 0) return;
 
@@ -134,11 +148,11 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
 
     // --- Monthly summary ---
     const items       = budgetData ?? [];
-    const totalLimit  = items.reduce((s, i) => s + Number(i.limit), 0);
+    const totalLimit  = items.reduce((s, i) => s + Number(i.effective_limit ?? i.limit), 0);
     const totalActual = items.reduce((s, i) => s + Number(i.actual), 0);
     const totalPct    = totalLimit > 0 ? Math.round((totalActual / totalLimit) * 100) : 0;
     const setCount    = items.filter((i) => i.limit > 0).length;
-    const overCount   = items.filter((i) => i.limit > 0 && Number(i.actual) > Number(i.limit)).length;
+    const overCount   = items.filter((i) => Number(i.effective_limit ?? i.limit) > 0 && Number(i.actual) > Number(i.effective_limit ?? i.limit)).length;
 
     // --- Pace summary ---
     const pace        = paceData ?? [];
@@ -285,12 +299,14 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
                         ) : (
                             <div className="space-y-3">
                                 {items.map((item) => {
-                                    const rawVal   = amounts[item.category.id] ?? '';
-                                    const savedLimit = Number(item.limit);
-                                    const pct      = savedLimit > 0 ? Math.round((Number(item.actual) / savedLimit) * 100) : 0;
-                                    const isOver   = savedLimit > 0 && Number(item.actual) > savedLimit;
-                                    const isNear   = !isOver && pct >= 80;
-                                    const color    = item.category.color ?? '#6366f1';
+                                    const rawVal        = amounts[item.category.id] ?? '';
+                                    const effectiveLimit = Number(item.effective_limit ?? item.limit);
+                                    const rollover      = Number(item.rollover_amount ?? 0);
+                                    const pct           = effectiveLimit > 0 ? Math.round((Number(item.actual) / effectiveLimit) * 100) : 0;
+                                    const isOver        = effectiveLimit > 0 && Number(item.actual) > effectiveLimit;
+                                    const isNear        = !isOver && pct >= 80;
+                                    const color         = item.category.color ?? '#6366f1';
+                                    const rolloverOn    = rollovers[item.category.id] ?? item.rollover_enabled;
 
                                     return (
                                         <div
@@ -319,7 +335,12 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
                                                                 Hampir habis
                                                             </span>
                                                         )}
-                                                        {item.is_fallback && !isOver && !isNear && (
+                                                        {rollover > 0 && (
+                                                            <span className="shrink-0 flex items-center gap-1 text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                                                <RefreshCw size={9} /> +{fmtShort(rollover)} carry over
+                                                            </span>
+                                                        )}
+                                                        {item.is_fallback && !isOver && !isNear && rollover === 0 && (
                                                             <span className="shrink-0 text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                                                                 dari sebelumnya
                                                             </span>
@@ -347,18 +368,47 @@ export default function BudgetIndex({ budgetData, paceData, period, month, week,
                                                     <span className="text-xs text-slate-500">
                                                         Terpakai: <span className={`font-semibold ${isOver ? 'text-red-600' : 'text-slate-700'}`}>{fmtShort(Number(item.actual))}</span>
                                                     </span>
-                                                    {savedLimit > 0 && (
+                                                    {effectiveLimit > 0 && (
                                                         <span className="text-xs text-slate-400">
                                                             Sisa: <span className={`font-semibold ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>
-                                                                {isOver ? '-' : ''}{fmtShort(Math.abs(savedLimit - Number(item.actual)))}
+                                                                {isOver ? '-' : ''}{fmtShort(Math.abs(effectiveLimit - Number(item.actual)))}
                                                             </span>
                                                         </span>
                                                     )}
                                                 </div>
-                                                <span className={`text-xs font-bold ${isOver ? 'text-red-500' : isNear ? 'text-amber-500' : savedLimit > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                                                    {savedLimit > 0 ? pct + '%' : 'Belum diset'}
+                                                <span className={`text-xs font-bold ${isOver ? 'text-red-500' : isNear ? 'text-amber-500' : effectiveLimit > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                    {effectiveLimit > 0 ? pct + '%' : 'Belum diset'}
                                                 </span>
                                             </div>
+                                            {/* Rollover toggle */}
+                                            {item.limit > 0 && (
+                                                <div className={`mt-3 pt-3 border-t flex items-center justify-between rounded-xl px-3 py-2 -mx-1 transition-colors duration-200 ${
+                                                    rolloverOn ? 'border-indigo-100 bg-indigo-50/60' : 'border-slate-100 bg-transparent'
+                                                }`}>
+                                                    <label className="flex items-center gap-2 cursor-pointer select-none" htmlFor={`rollover-${item.category.id}`}>
+                                                        <RefreshCw size={12} className={rolloverOn ? 'text-indigo-500' : 'text-slate-400'} />
+                                                        <span className={`text-xs font-medium transition-colors ${rolloverOn ? 'text-indigo-700' : 'text-slate-500'}`}>
+                                                            Carry over sisa ke bulan depan
+                                                        </span>
+                                                    </label>
+                                                    <button
+                                                        id={`rollover-${item.category.id}`}
+                                                        type="button"
+                                                        role="switch"
+                                                        aria-checked={rolloverOn}
+                                                        onClick={() => setRollovers((prev) => ({ ...prev, [item.category.id]: !rolloverOn }))}
+                                                        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 ${
+                                                            rolloverOn ? 'bg-indigo-500' : 'bg-slate-200'
+                                                        }`}
+                                                    >
+                                                        <span
+                                                            className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ${
+                                                                rolloverOn ? 'translate-x-4' : 'translate-x-0'
+                                                            }`}
+                                                        />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}

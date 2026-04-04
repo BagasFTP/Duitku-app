@@ -11,6 +11,7 @@ class Budget extends Model
         'user_id',
         'category_id',
         'amount',
+        'rollover_enabled',
         'period_type',
         'month',
         'week',
@@ -20,7 +21,8 @@ class Budget extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
+            'amount'           => 'decimal:2',
+            'rollover_enabled' => 'boolean',
         ];
     }
 

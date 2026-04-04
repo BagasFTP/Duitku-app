@@ -7,6 +7,7 @@ import {
     Wallet as WalletIcon, Calendar, ChevronLeft, ChevronRight, X, Loader2, Tag,
 } from 'lucide-react';
 import DynamicIcon from '@/Components/DynamicIcon';
+import DatePicker from '@/Components/DatePicker';
 
 interface Category {
     id: number;
@@ -136,11 +137,9 @@ function SaveModal({ scan, wallets, categories, onClose, onSaved }: SaveModalPro
                     {/* Date */}
                     <div>
                         <label className={labelCls}>Tanggal</label>
-                        <input
-                            type="date"
+                        <DatePicker
                             value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className={inputCls}
+                            onChange={(val) => setDate(val)}
                         />
                     </div>
 

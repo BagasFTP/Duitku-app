@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -182,8 +183,8 @@ PROMPT;
         }
 
         $validated = $request->validate([
-            'wallet_id'   => ['required', 'exists:wallets,id'],
-            'category_id' => ['nullable', 'exists:categories,id'],
+            'wallet_id'   => ['required', Rule::exists('wallets', 'id')->where('user_id', auth()->id())],
+            'category_id' => ['nullable', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
             'amount'      => 'required|numeric|min:1',
             'description' => 'nullable|string|max:255',
             'date'        => 'required|date',

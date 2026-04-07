@@ -74,8 +74,6 @@ export default function BudgetAlertBell() {
         setOpen(false);
     };
 
-    if (alerts.length === 0) return null;
-
     return (
         <div ref={ref} className="relative">
             <button
